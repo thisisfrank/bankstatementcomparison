@@ -757,20 +757,35 @@ function PricingPage({ isVisible, onBack, isDark }: {
       return;
     }
 
-    // Redirect to Stripe payment link
-    const paymentLinks = {
-      'Starter': 'https://buy.stripe.com/test_dRmdRbcurfW97JAdhBgUM00',
-      'Pro': 'https://buy.stripe.com/test_dRmdRbcurfW97JAdhBgUM00',     // You can create separate links for each tier
-      'Business': 'https://buy.stripe.com/test_dRmdRbcurfW97JAdhBgUM00' // You can create separate links for each tier
-    };
-
-    const paymentLink = paymentLinks[planName as keyof typeof paymentLinks];
+    // Find the plan and use its specific price ID
+    const plan = plans.find(p => p.name === planName);
     
-    if (paymentLink) {
-      window.open(paymentLink, '_blank');
+    if (plan && plan.priceId) {
+      try {
+        const stripe = await stripePromise;
+        if (!stripe) {
+          console.error('Stripe failed to load');
+          return;
+        }
+
+        const { error } = await stripe.redirectToCheckout({
+          lineItems: [{ price: plan.priceId, quantity: 1 }],
+          mode: 'subscription',
+          successUrl: `${window.location.origin}/success`,
+          cancelUrl: `${window.location.origin}/pricing`,
+        });
+
+        if (error) {
+          console.error('Checkout error:', error);
+          alert('Checkout failed. Please try again.');
+        }
+      } catch (error) {
+        console.error('Checkout failed:', error);
+        alert('Checkout failed. Please try again.');
+      }
     } else {
-      console.error('Payment link not found for plan:', planName);
-      alert('Payment link not configured for this plan. Please contact support.');
+      console.error('Price ID not found for plan:', planName);
+      alert('Plan not configured. Please contact support.');
     }
   };
 
@@ -791,13 +806,13 @@ function PricingPage({ isVisible, onBack, isDark }: {
       name: 'Pro',
       price: '$69/month',
       pages: '400 pages per month',
-      priceId: 'price_1Rrpe8RD0ogceRR4LdVUllat'
+      priceId: 'price_1Rrrw7RD0ogceRR4BEdntV12'
     },
     {
       name: 'Business',
       price: '$149/month',
       pages: '1,000 pages per month',
-      priceId: 'price_1Rrpe8RD0ogceRR4LdVUllat'
+      priceId: 'price_1RrrwQRD0ogceRR41ZscbkhJ'
     }
   ];
 
@@ -818,7 +833,7 @@ function PricingPage({ isVisible, onBack, isDark }: {
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
               <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                BankCompare
+                
               </span>
             </div>
             
@@ -842,7 +857,7 @@ function PricingPage({ isVisible, onBack, isDark }: {
             <h1 className={`text-4xl md:text-5xl font-bold mb-4 ${
               isDark ? 'text-gray-100' : 'text-gray-800'
             }`}>
-              Simple, Transparent Pricing
+              Simple Pricing
             </h1>
             <p className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
               Choose the plan that fits your needs
@@ -921,7 +936,7 @@ function SettingsPage({ isVisible, onBack, isDark }: {
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
               <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                BankCompare
+                
               </span>
             </div>
             
@@ -943,21 +958,57 @@ function SettingsPage({ isVisible, onBack, isDark }: {
         <div className={`rounded-xl border shadow-lg p-8 ${
           isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
         }`}>
-          <h1 className={`text-3xl font-bold mb-8 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-            Settings
-          </h1>
+          <div className="text-center mb-8">
+            <h1 className={`text-3xl font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+              Settings
+            </h1>
+          </div>
           
-          <div className="flex justify-center">
-            <button
-              onClick={handleManageSubscription}
-              className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 border ${
-                isDark 
-                  ? 'bg-white text-gray-800 border-gray-300 hover:bg-gray-100' 
-                  : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Manage Subscription
-            </button>
+          <div className="space-y-6">
+            <div className="flex justify-center">
+              <button
+                onClick={handleManageSubscription}
+                className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 border ${
+                  isDark 
+                    ? 'bg-white text-gray-800 border-gray-300 hover:bg-gray-100' 
+                    : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Manage Subscription
+              </button>
+            </div>
+            
+            <div className="border-t pt-6">
+              <h3 className={`text-lg font-semibold mb-4 text-center ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                Share App
+              </h3>
+              <div className="flex items-center justify-center gap-3">
+                <input
+                  type="text"
+                  value={window.location.origin}
+                  readOnly
+                  className={`px-4 py-2 rounded-lg border text-sm ${
+                    isDark 
+                      ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                      : 'bg-gray-50 border-gray-300 text-gray-700'
+                  }`}
+                  style={{ width: '300px' }}
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(window.location.origin);
+                    alert('Link copied to clipboard!');
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    isDark 
+                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  Copy Link
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1771,12 +1822,17 @@ function App() {
             <div className="container mx-auto px-4 py-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-blue-600' : 'bg-blue-600'}`}>
+                  <button 
+                    onClick={() => {
+                      setShowPricingModal(false);
+                      setShowSettingsPage(false);
+                      setShowUsagePage(false);
+                      setShowPastDocumentsPage(false);
+                    }}
+                    className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  >
                     <BarChart3 className="h-5 w-5 text-white" />
-                  </div>
-                  <span className={`font-semibold text-lg ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                    BankCompare
-                  </span>
+                  </button>
                 </div>
                 
                 <nav className="flex items-center gap-6">
