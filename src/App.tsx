@@ -1230,7 +1230,7 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
               <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                BankCompare
+                
               </span>
             </div>
             
