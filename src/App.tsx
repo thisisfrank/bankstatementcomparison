@@ -8,7 +8,7 @@ const stripePromise = loadStripe('pk_test_51RrpatRD0ogceRR4A7KSSLRWPStkofC0wJ7dc
 
 // API Configuration
 const API_KEY = 'api-AB7psQuumDdjVHLTPYMDghH2xUgaKcuJZVvwReMMsxM9iQBaYJg/BrelRUX07neH';
-const API_BASE_URL = 'https://api.example.com'; // Replace with actual API endpoint
+const API_BASE_URL = 'https://api.example.com'; // TODO: Replace with actual API endpoint when available
 
 interface Transaction {
   id: string;
@@ -61,6 +61,12 @@ class BankStatementParser {
 
   async parsePDF(file: File): Promise<ParsedStatement> {
     try {
+      // For now, use sample data since API endpoint is not configured
+      console.log('Using sample data for PDF parsing - API endpoint not configured');
+      return this.generateSampleData(file.name);
+      
+      // Uncomment the following code when you have the actual API endpoint:
+      /*
       // Create FormData to send the PDF file
       const formData = new FormData();
       formData.append('file', file);
@@ -83,9 +89,10 @@ class BankStatementParser {
       
       // Process the API response and separate withdrawals from deposits
       return this.processAPIResponse(apiResponse, file.name);
+      */
       
     } catch (error) {
-      console.error('Error parsing PDF via API:', error);
+      console.error('Error parsing PDF:', error);
       // Fallback to sample data if API fails
       return this.generateSampleData(file.name);
     }
