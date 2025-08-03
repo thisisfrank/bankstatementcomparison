@@ -799,11 +799,11 @@ function ComparisonResults({
   );
 }
 
-function AuthModal({ isOpen, onClose, onSignIn, isDark }: {
-  isOpen: boolean;
-  onClose: () => void;
-  onSignIn: () => void;
+function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
+  isVisible: boolean;
+  onBack: () => void;
   isDark: boolean;
+  onSignIn: () => void;
 }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -821,7 +821,7 @@ function AuthModal({ isOpen, onClose, onSignIn, isDark }: {
       // Simulate Google authentication
       await new Promise(resolve => setTimeout(resolve, 1500));
       onSignIn();
-      onClose();
+      onBack();
     } catch (error) {
       setError('Google sign-in failed. Please try again.');
     } finally {
@@ -849,7 +849,7 @@ function AuthModal({ isOpen, onClose, onSignIn, isDark }: {
       }
 
       onSignIn();
-      onClose();
+      onBack();
     } catch (error) {
       setError('Authentication failed. Please try again.');
     } finally {
@@ -857,203 +857,230 @@ function AuthModal({ isOpen, onClose, onSignIn, isDark }: {
     }
   };
 
-  if (!isOpen) return null;
+  if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className={`rounded-xl max-w-md w-full p-6 relative ${
-        isDark ? 'bg-gray-800' : 'bg-white'
+    <div className={`min-h-screen transition-colors duration-300 ${
+      isDark 
+        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
+        : 'bg-gradient-to-br from-blue-50 via-white to-green-50'
+    }`}>
+      {/* Navigation Header */}
+      <div className={`sticky top-0 z-40 backdrop-blur-sm border-b ${
+        isDark ? 'bg-gray-900/80 border-gray-700' : 'bg-white/80 border-gray-200'
       }`}>
-        <button
-          onClick={onClose}
-          className={`absolute top-4 right-4 transition-colors ${
-            isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'
-          }`}
-        >
-          <X className="h-5 w-5" />
-        </button>
-        
-        <div className="text-center mb-6">
-          <div className={`p-3 rounded-full w-16 h-16 mx-auto flex items-center justify-center mb-4 ${
-            isDark ? 'bg-blue-900/30' : 'bg-blue-100'
-          }`}>
-            <Users className={`h-8 w-8 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
-          </div>
-          
-          <h3 className={`text-xl font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-            {isSignUp ? 'Create Account' : 'Sign In'}
-          </h3>
-          
-          <p className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            {isSignUp 
-              ? 'Sign up to save your comparisons and get more features' 
-              : 'Sign in to access your saved comparisons'
-            }
-          </p>
-        </div>
-
-        {/* Google Sign In Button */}
-        <button
-          onClick={handleGoogleSignIn}
-          disabled={isLoading}
-          className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-200 border-2 mb-4 ${
-            isLoading
-              ? isDark 
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed border-gray-600' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed border-gray-300'
-              : isDark 
-                ? 'bg-white text-gray-800 hover:bg-gray-50 border-gray-300' 
-                : 'bg-white text-gray-800 hover:bg-gray-50 border-gray-300'
-          }`}
-        >
-          {isLoading ? (
-            <div className="flex items-center justify-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Signing in with Google...
-            </div>
-          ) : (
-            <div className="flex items-center justify-center gap-3">
-              <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-xs font-bold">G</span>
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`p-2 rounded-lg ${isDark ? 'bg-blue-600' : 'bg-blue-600'}`}>
+                <Users className="h-5 w-5 text-white" />
               </div>
-              Sign in with Google
+              <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                {isSignUp ? 'Create Account' : 'Sign In'}
+              </span>
+            </div>
+            
+            <button 
+              onClick={onBack}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                isDark 
+                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
+                  : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
+              }`}
+            >
+              ← Back
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div className="container mx-auto px-4 py-8 max-w-md">
+        <div className={`rounded-xl border shadow-lg p-8 ${
+          isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+        }`}>
+          
+          <div className="text-center mb-6">
+            <div className={`p-3 rounded-full w-16 h-16 mx-auto flex items-center justify-center mb-4 ${
+              isDark ? 'bg-blue-900/30' : 'bg-blue-100'
+            }`}>
+              <Users className={`h-8 w-8 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+            </div>
+            
+            <h3 className={`text-xl font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+              {isSignUp ? 'Create Account' : 'Sign In'}
+            </h3>
+            
+            <p className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              {isSignUp 
+                ? 'Sign up to save your comparisons and get more features' 
+                : 'Sign in to access your saved comparisons'
+              }
+            </p>
+          </div>
+
+          {error && (
+            <div className={`mb-4 p-3 rounded-lg ${
+              isDark ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700'
+            }`}>
+              {error}
             </div>
           )}
-        </button>
 
-        {/* Divider */}
-        <div className="relative mb-4">
-          <div className="absolute inset-0 flex items-center">
-            <div className={`w-full border-t ${isDark ? 'border-gray-600' : 'border-gray-300'}`} />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className={`px-2 ${isDark ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-500'}`}>
-              Or
-            </span>
-          </div>
-        </div>
-
-        {/* Email Form Toggle */}
-        {!showEmailForm ? (
+          {/* Google Sign In Button */}
           <button
-            onClick={() => setShowEmailForm(true)}
-            className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-200 border ${
-              isDark 
-                ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
-                : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
+            onClick={handleGoogleSignIn}
+            disabled={isLoading}
+            className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-200 border-2 mb-4 ${
+              isLoading
+                ? isDark 
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed border-gray-600' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed border-gray-300'
+                : isDark 
+                  ? 'bg-white text-gray-800 hover:bg-gray-50 border-gray-300' 
+                  : 'bg-white text-gray-800 hover:bg-gray-50 border-gray-300'
             }`}
           >
-            Continue with email
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Signing in with Google...
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">G</span>
+                </div>
+                Sign in with Google
+              </div>
+            )}
           </button>
-        ) : (
-          <form onSubmit={handleEmailSubmit} className="space-y-4">
-            {isSignUp && (
+
+          {/* Divider */}
+          <div className="relative mb-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className={`w-full border-t ${isDark ? 'border-gray-600' : 'border-gray-300'}`} />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className={`px-2 ${isDark ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-500'}`}>
+                Or
+              </span>
+            </div>
+          </div>
+
+          {/* Email Form Toggle */}
+          {!showEmailForm ? (
+            <button
+              onClick={() => setShowEmailForm(true)}
+              className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-200 border ${
+                isDark 
+                  ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
+                  : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Continue with email
+            </button>
+          ) : (
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
+              {isSignUp && (
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border ${
+                      isDark 
+                        ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                        : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    placeholder="Enter your full name"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Full Name
+                  Email
                 </label>
                 <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className={`w-full px-3 py-2 rounded-lg border ${
                     isDark 
                       ? 'bg-gray-700 border-gray-600 text-gray-200' 
                       : 'bg-white border-gray-300 text-gray-900'
                   }`}
-                  placeholder="Enter your full name"
+                  placeholder="Enter your email"
                 />
               </div>
-            )}
 
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={`w-full px-3 py-2 rounded-lg border ${
-                  isDark 
-                    ? 'bg-gray-700 border-gray-600 text-gray-200' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                placeholder="Enter your email"
-              />
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={`w-full px-3 py-2 rounded-lg border ${
-                  isDark 
-                    ? 'bg-gray-700 border-gray-600 text-gray-200' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                placeholder="Enter your password"
-              />
-            </div>
-
-            {error && (
-              <div className={`text-sm p-3 rounded-lg ${
-                isDark ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700'
-              }`}>
-                {error}
+              <div>
+                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border ${
+                    isDark 
+                      ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                      : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  placeholder="Enter your password"
+                />
               </div>
-            )}
 
+              <button
+                type="submit"
+                disabled={isLoading}
+                className={`w-full py-3 rounded-lg font-medium transition-colors ${
+                  isLoading
+                    ? isDark 
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : isDark 
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+              >
+                {isLoading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {isSignUp ? 'Creating Account...' : 'Signing In...'}
+                  </div>
+                ) : (
+                  isSignUp ? 'Create Account' : 'Sign In'
+                )}
+              </button>
+            </form>
+          )}
+
+          <div className="mt-6 text-center">
             <button
-              type="submit"
-              disabled={isLoading}
-              className={`w-full py-3 rounded-lg font-medium transition-colors ${
-                isLoading
-                  ? isDark 
-                    ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : isDark 
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setShowEmailForm(false);
+                setError('');
+              }}
+              className={`text-sm transition-colors ${
+                isDark ? 'text-gray-400 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
               }`}
             >
-              {isLoading ? (
-                <div className="flex items-center justify-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {isSignUp ? 'Creating Account...' : 'Signing In...'}
-                </div>
-              ) : (
-                isSignUp ? 'Create Account' : 'Sign In'
-              )}
+              {isSignUp 
+                ? 'Already have an account? Sign in' 
+                : "Don't have an account? Sign up"
+              }
             </button>
-          </form>
-        )}
+          </div>
 
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => {
-              setIsSignUp(!isSignUp);
-              setShowEmailForm(false);
-              setError('');
-            }}
-            className={`text-sm transition-colors ${
-              isDark ? 'text-gray-400 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
-            }`}
-          >
-            {isSignUp 
-              ? 'Already have an account? Sign in' 
-              : "Don't have an account? Sign up"
-            }
-          </button>
-        </div>
-
-        <div className="mt-4 text-center">
-          <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-            By signing up, you agree to our Terms of Service and Privacy Policy
+          <div className="mt-4 text-center">
+            <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+              By signing up, you agree to our Terms of Service and Privacy Policy
+            </div>
           </div>
         </div>
       </div>
@@ -1154,17 +1181,25 @@ function PaywallModal({ isOpen, onClose, onPayment, totalCategories, isDark }: {
   );
 }
 
-function PricingPage({ isVisible, onBack, isDark }: {
+function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
   isVisible: boolean;
   onBack: () => void;
   isDark: boolean;
+  onOpenAuth: () => void;
 }) {
   if (!isVisible) return null;
 
   const handleCheckout = async (planName: string) => {
-    if (planName === 'Free') {
-      // For free plan, just redirect to main app
+    if (planName === 'Anonymous') {
+      // For anonymous plan, just redirect to main app
       onBack();
+      return;
+    }
+    
+    if (planName === 'Sign Up') {
+      // For sign up plan, redirect to auth page
+      onBack(); // Close pricing page
+      onOpenAuth(); // Open auth page
       return;
     }
 
@@ -1210,8 +1245,8 @@ function PricingPage({ isVisible, onBack, isDark }: {
       isAnonymous: true
     },
     {
-      name: 'Free',
-      price: '$0',
+      name: 'Sign Up',
+      price: 'Free',
       pages: '30 pages per month',
       description: 'Sign up for free',
       priceId: null
@@ -1268,7 +1303,7 @@ function PricingPage({ isVisible, onBack, isDark }: {
                   : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
               }`}
             >
-              ← Back to App
+              ← Back
             </button>
           </div>
         </div>
@@ -1329,7 +1364,7 @@ function PricingPage({ isVisible, onBack, isDark }: {
                         : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
                   }`}
                 >
-                  {plan.isAnonymous ? 'Try Now' : plan.name === 'Free' ? 'Sign Up Free' : `Subscribe to ${plan.name}`}
+                  {plan.isAnonymous ? 'Try Now' : plan.name === 'Sign Up' ? 'Sign Up' : 'Subscribe'}
                 </button>
               </div>
             ))}
@@ -1388,7 +1423,7 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode }: {
                   : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
               }`}
             >
-              ← Back to App
+              ← Back
             </button>
           </div>
         </div>
@@ -1639,7 +1674,7 @@ function UsagePage({ isVisible, onBack, isDark }: {
                   : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
               }`}
             >
-              ← Back to App
+              ← Back
             </button>
           </div>
         </div>
@@ -1760,7 +1795,7 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
                   : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
               }`}
             >
-              ← Back to App
+              ← Back
             </button>
           </div>
         </div>
@@ -2236,7 +2271,7 @@ function App() {
   const [showSettingsPage, setShowSettingsPage] = useState(false);
   const [showUsagePage, setShowUsagePage] = useState(false);
   const [showPastDocumentsPage, setShowPastDocumentsPage] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showAuthPage, setShowAuthPage] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false); // Simulate signed in state
 
   const parser = new BankStatementParser();
@@ -2523,7 +2558,7 @@ function App() {
 
   return (
     <>
-      {!showPricingModal && !showSettingsPage && !showUsagePage && !showPastDocumentsPage ? (
+      {!showAuthPage && !showPricingModal && !showSettingsPage && !showUsagePage && !showPastDocumentsPage ? (
         <div className={`min-h-screen transition-colors duration-300 ${
           isDarkMode 
             ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
@@ -2588,7 +2623,7 @@ function App() {
                         Settings
                       </button>
                       <button 
-                        onClick={() => setShowAuthModal(true)}
+                        onClick={() => setShowAuthPage(true)}
                         className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                           isDarkMode 
                             ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105' 
@@ -3092,20 +3127,21 @@ function App() {
           totalCategories={selectedCategories.length}
           isDark={isDarkMode}
         />
-        
-        <AuthModal
-          isOpen={showAuthModal}
-          onClose={() => setShowAuthModal(false)}
+          </div>
+        </div>
+      ) : showAuthPage ? (
+        <AuthPage
+          isVisible={showAuthPage}
+          onBack={() => setShowAuthPage(false)}
           onSignIn={() => setIsSignedIn(true)}
           isDark={isDarkMode}
         />
-          </div>
-        </div>
       ) : showPricingModal ? (
         <PricingPage
           isVisible={showPricingModal}
           onBack={() => setShowPricingModal(false)}
           isDark={isDarkMode}
+          onOpenAuth={() => setShowAuthPage(true)}
         />
       ) : showSettingsPage ? (
         <SettingsPage
@@ -3131,6 +3167,7 @@ function App() {
           isVisible={showPricingModal}
           onBack={() => setShowPricingModal(false)}
           isDark={isDarkMode}
+          onOpenAuth={() => setShowAuthPage(true)}
         />
       )}
     </>
