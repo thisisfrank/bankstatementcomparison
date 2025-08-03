@@ -8,7 +8,7 @@ const stripePromise = loadStripe('pk_test_51RrpatRD0ogceRR4A7KSSLRWPStkofC0wJ7dc
 
 // API Configuration
 const API_KEY = 'api-AB7psQuumDdjVHLTPYMDghH2xUgaKcuJZVvwReMMsxM9iQBaYJg/BrelRUX07neH';
-const API_BASE_URL = 'https://api.example.com'; // TODO: Replace with actual API endpoint when available
+const API_BASE_URL = 'https://api2.bankstatementconverter.com/api/v1';
 
 interface Transaction {
   id: string;
@@ -38,15 +38,13 @@ interface ComparisonResult {
 
 const categories = [
   { id: 'food-dining', name: 'Food & Dining', icon: Utensils, color: '#FF6B6B', keywords: ['starbucks', 'coffee', 'restaurant', 'mcdonald', 'taco bell', 'chipotle', 'subway', 'pizza', 'burger', 'dining'] },
-  { id: 'groceries', name: 'Groceries', icon: ShoppingBag, color: '#4ECDC4', keywords: ['frys food', 'safeway', 'walmart', 'target', 'kroger', 'grocery', 'market', 'food store'] },
+  { id: 'groceries', name: 'Groceries', icon: ShoppingBag, color: '#4ECDC4', keywords: ['frys', 'safeway', 'walmart', 'target', 'kroger', 'grocery', 'market', 'food store'] },
   { id: 'gas-transport', name: 'Gas & Transportation', icon: Car, color: '#45B7D1', keywords: ['circle k', 'shell', 'chevron', 'exxon', 'uber', 'lyft', 'gas', 'fuel', 'transport'] },
-  { id: 'shopping', name: 'Shopping', icon: ShoppingBag, color: '#96CEB4', keywords: ['amazon', 'ebay', 'shop', 'store', 'retail', 'purchase'] },
-  { id: 'subscriptions', name: 'Subscriptions', icon: Gamepad2, color: '#FCEA2B', keywords: ['netflix', 'spotify', 'subscription', 'monthly', 'hulu', 'disney', 'prime'] },
-  { id: 'utilities', name: 'Utilities', icon: Zap, color: '#FF9FF3', keywords: ['electric', 'water', 'gas bill', 'utility', 'phone', 'internet', 'cable'] },
-  { id: 'health', name: 'Health & Fitness', icon: Activity, color: '#54A0FF', keywords: ['gym', 'health', 'medical', 'pharmacy', 'fitness', 'doctor'] },
-  { id: 'fees', name: 'ATM & Fees', icon: DollarSign, color: '#FF7675', keywords: ['atm', 'fee', 'charge', 'overdraft', 'penalty'] },
-  { id: 'income', name: 'Income', icon: DollarSign, color: '#00D4AA', keywords: ['salary', 'deposit', 'payment', 'income', 'payroll', 'direct deposit'] },
-  { id: 'refunds', name: 'Refunds', icon: CheckCircle, color: '#00B894', keywords: ['refund', 'return', 'credit', 'reimbursement'] }
+  { id: 'shopping', name: 'Shopping', icon: ShoppingBag, color: '#96CEB4', keywords: ['amazon', 'ebay', 'shop', 'store', 'retail', 'purchase', 'misc', 'other', 'unknown', 'unclassified'] },
+  { id: 'subscriptions', name: 'Subscriptions', icon: Gamepad2, color: '#FCEA2B', keywords: ['netflix', 'spotify', 'subscription', 'monthly', 'hulu', 'disney', 'prime', 'recurring', 'verizon'] },
+  { id: 'utilities', name: 'Utilities', icon: Zap, color: '#FF9FF3', keywords: ['electric', 'water', 'gas bill', 'utility', 'phone', 'internet', 'cable', 'atm', 'fee', 'charge', 'overdraft', 'penalty', 'applecard'] },
+  { id: 'health', name: 'Health & Fitness', icon: Activity, color: '#54A0FF', keywords: ['gym', 'health', 'medical', 'pharmacy', 'fitness', 'doctor', 'fitness', 'Fitness'] },
+  { id: 'income', name: 'Income', icon: DollarSign, color: '#00D4AA', keywords: ['salary', 'deposit', 'payment', 'income', 'payroll', 'direct deposit'] }
 ];
 
 class BankStatementParser {
@@ -61,35 +59,68 @@ class BankStatementParser {
 
   async parsePDF(file: File): Promise<ParsedStatement> {
     try {
-      // For now, use sample data since API endpoint is not configured
-      console.log('Using sample data for PDF parsing - API endpoint not configured');
-      return this.generateSampleData(file.name);
-      
-      // Uncomment the following code when you have the actual API endpoint:
-      /*
-      // Create FormData to send the PDF file
+      // Step 1: Upload the PDF file
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('api_key', API_KEY);
 
-      // Make API call to parse the PDF
-      const response = await fetch(`${API_BASE_URL}/parse-statement`, {
+      const uploadResponse = await fetch(`${API_BASE_URL}/BankStatement`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${API_KEY}`,
+          'Authorization': API_KEY,
         },
         body: formData
       });
 
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed: ${uploadResponse.status}`);
       }
 
-      const apiResponse = await response.json();
+      const uploadResult = await uploadResponse.json();
+      const uuid = uploadResult[0].uuid;
+      const state = uploadResult[0].state;
+
+      // Step 2: Check if processing is needed (for image-based PDFs)
+      if (state === 'PROCESSING') {
+        let currentState = state;
+        while (currentState === 'PROCESSING') {
+          await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+          
+          const statusResponse = await fetch(`${API_BASE_URL}/BankStatement/status`, {
+            method: 'POST',
+            headers: {
+              'Authorization': API_KEY,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify([uuid])
+          });
+
+          if (!statusResponse.ok) {
+            throw new Error(`Status check failed: ${statusResponse.status}`);
+          }
+
+          const statusResult = await statusResponse.json();
+          currentState = statusResult[0].state;
+        }
+      }
+
+      // Step 3: Convert the statement to JSON
+      const convertResponse = await fetch(`${API_BASE_URL}/BankStatement/convert?format=JSON`, {
+        method: 'POST',
+        headers: {
+          'Authorization': API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([uuid])
+      });
+
+      if (!convertResponse.ok) {
+        throw new Error(`Conversion failed: ${convertResponse.status}`);
+      }
+
+      const convertResult = await convertResponse.json();
       
       // Process the API response and separate withdrawals from deposits
-      return this.processAPIResponse(apiResponse, file.name);
-      */
+      return this.processAPIResponse(convertResult[0], file.name);
       
     } catch (error) {
       console.error('Error parsing PDF:', error);
@@ -99,25 +130,35 @@ class BankStatementParser {
   }
 
   private processAPIResponse(apiResponse: any, fileName: string): ParsedStatement {
-    // This structure will depend on your API response format
-    // For now, I'll assume the API returns an array of transactions
-    const rawTransactions = apiResponse.transactions || apiResponse.data || [];
+    // The API returns { normalised: [...] } format
+    const rawTransactions = apiResponse.normalised || [];
     
     const transactions: Transaction[] = [];
     const withdrawals: Transaction[] = [];
     const deposits: Transaction[] = [];
 
     rawTransactions.forEach((rawTx: any, index: number) => {
-      const amount = parseFloat(rawTx.amount || rawTx.value || 0);
+      const amount = parseFloat(rawTx.amount || 0);
       const isWithdrawal = amount < 0;
       const absoluteAmount = Math.abs(amount);
       
+      // ALL positive transactions go to income category
+      let category = 'income';
+      if (isWithdrawal) {
+        // Only categorize negative transactions (withdrawals)
+        category = this.categorizeTransaction(rawTx.description || '');
+        // Safety check: negative transactions should never be income
+        if (category === 'income') {
+          category = 'utilities'; // Default to utilities for unrecognized negative transactions
+        }
+      }
+      
       const transaction: Transaction = {
-        id: rawTx.id || `${rawTx.date}-${index}`,
-        date: rawTx.date || rawTx.transaction_date || '',
-        description: rawTx.description || rawTx.memo || rawTx.narrative || '',
+        id: `${rawTx.date}-${index}`,
+        date: rawTx.date || '',
+        description: rawTx.description || '',
         amount: absoluteAmount,
-        category: this.categorizeTransaction(rawTx.description || rawTx.memo || ''),
+        category: category,
         type: isWithdrawal ? 'withdrawal' : 'deposit'
       };
 
@@ -145,6 +186,11 @@ class BankStatementParser {
 
   private categorizeTransaction(description: string): string {
     const lowerDesc = description.toLowerCase();
+    
+    // Special case: Frys always goes to groceries (even if it says recurring)
+    if (lowerDesc.includes('frys')) {
+      return 'groceries';
+    }
     
     for (const [categoryId, keywords] of Object.entries(this.categoryKeywords)) {
       if (keywords.some(keyword => lowerDesc.includes(keyword))) {
@@ -283,7 +329,7 @@ function FileUploadZone({
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-2">
         <label className={`text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-          {label}
+          {statementName}
         </label>
         {onStatementNameChange && (
           <button
@@ -396,12 +442,16 @@ function CategorySelector({
   selectedCategories, 
   onCategoryChange,
   comparisonData,
-  isDark
+  parsedData,
+  isDark,
+  editableStatementNames
 }: {
   selectedCategories: string[];
   onCategoryChange: (categoryIds: string[]) => void;
   comparisonData: { [key: string]: ComparisonResult } | null;
+  parsedData: { statement1: ParsedStatement | null; statement2: ParsedStatement | null };
   isDark: boolean;
+  editableStatementNames: { statement1: string; statement2: string };
 }) {
   const handleCategoryToggle = (categoryId: string) => {
     if (selectedCategories.includes(categoryId)) {
@@ -412,7 +462,7 @@ function CategorySelector({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
         Select Categories to Compare
       </h3>
@@ -471,6 +521,117 @@ function CategorySelector({
           );
         })}
       </div>
+
+      {/* Line Items for Testing */}
+      {selectedCategories.length > 0 && (
+        <div className="space-y-4">
+          <h4 className={`text-md font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+            Line Items by Category (Testing)
+          </h4>
+          
+          {selectedCategories.map((categoryId) => {
+            const category = categories.find(c => c.id === categoryId);
+            const statement1Transactions = parsedData.statement1?.transactions.filter(t => t.category === categoryId) || [];
+            const statement2Transactions = parsedData.statement2?.transactions.filter(t => t.category === categoryId) || [];
+            
+            return (
+              <div key={categoryId} className={`rounded-lg border p-4 ${
+                isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+              }`}>
+                <h5 className={`font-medium mb-3 flex items-center gap-2 ${
+                  isDark ? 'text-gray-200' : 'text-gray-800'
+                }`}>
+                  <div 
+                    className="p-2 rounded-full"
+                    style={{ backgroundColor: category?.color + '20' }}
+                  >
+                    {category && <category.icon className="h-4 w-4" style={{ color: category.color }} />}
+                  </div>
+                  {category?.name} ({statement1Transactions.length + statement2Transactions.length} transactions)
+                </h5>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Statement 1 Transactions */}
+                  <div>
+                    <h6 className={`text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      {editableStatementNames.statement1}
+                    </h6>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {statement1Transactions.length > 0 ? (
+                        statement1Transactions.map((transaction) => (
+                          <div key={transaction.id} className={`text-xs p-2 rounded ${
+                            isDark ? 'bg-gray-700' : 'bg-gray-50'
+                          }`}>
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                                  {transaction.description}
+                                </div>
+                                <div className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                  {transaction.date}
+                                </div>
+                              </div>
+                              <div className={`font-medium ml-2 ${
+                                transaction.type === 'withdrawal' 
+                                  ? isDark ? 'text-red-400' : 'text-red-600'
+                                  : isDark ? 'text-green-400' : 'text-green-600'
+                              }`}>
+                                {transaction.type === 'withdrawal' ? '-' : '+'}${transaction.amount.toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          No transactions in this category
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Statement 2 Transactions */}
+                  <div>
+                    <h6 className={`text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      {editableStatementNames.statement2}
+                    </h6>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {statement2Transactions.length > 0 ? (
+                        statement2Transactions.map((transaction) => (
+                          <div key={transaction.id} className={`text-xs p-2 rounded ${
+                            isDark ? 'bg-gray-700' : 'bg-gray-50'
+                          }`}>
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                                  {transaction.description}
+                                </div>
+                                <div className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                  {transaction.date}
+                                </div>
+                              </div>
+                              <div className={`font-medium ml-2 ${
+                                transaction.type === 'withdrawal' 
+                                  ? isDark ? 'text-red-400' : 'text-red-600'
+                                  : isDark ? 'text-green-400' : 'text-green-600'
+                              }`}>
+                                {transaction.type === 'withdrawal' ? '-' : '+'}${transaction.amount.toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          No transactions in this category
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -516,72 +677,53 @@ function ComparisonResults({
           <BarChart3 className={`h-6 w-6 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
           Spending Comparison Results
         </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className={`p-4 rounded-lg text-center ${
-            isDark ? 'bg-blue-900/30' : 'bg-blue-50'
-          }`}>
-            <div className={`text-xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-              ${Object.values(previewData).reduce((sum, r) => sum + r.statement1, 0).toFixed(2)}
-            </div>
-            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              {statement1Name} Spending
-            </div>
-          </div>
-          
-          <div className={`p-4 rounded-lg text-center ${
-            isDark ? 'bg-green-900/30' : 'bg-green-50'
-          }`}>
-            <div className={`text-xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-              ${Object.values(previewData).reduce((sum, r) => sum + r.statement2, 0).toFixed(2)}
-            </div>
-            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              {statement2Name} Spending
-            </div>
-          </div>
-          
-          <div className={`p-4 rounded-lg text-center ${
-            isDark ? 'bg-orange-900/30' : 'bg-orange-50'
-          }`}>
-            <div className={`text-xl font-bold ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>
-              ${Object.values(previewData).reduce((sum, r) => sum + r.difference, 0).toFixed(2)}
-            </div>
-            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              Spending Difference
-            </div>
-          </div>
-          
-          <div className={`p-4 rounded-lg text-center ${
-            isDark ? 'bg-purple-900/30' : 'bg-purple-50'
-          }`}>
-            <div className={`text-xl font-bold ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>
-              ${(Object.values(previewData).reduce((sum, r) => sum + r.statement1, 0) - Object.values(previewData).reduce((sum, r) => sum + r.statement2, 0)).toFixed(2)}
-            </div>
-            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              Net Difference
-            </div>
-          </div>
-        </div>
 
         {chartData.length > 0 && !isPreview && (
-          <div className="h-64 mb-6">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e5e7eb'} />
-                <XAxis 
-                  dataKey="category" 
-                  tick={{ fill: isDark ? '#d1d5db' : '#374151' }}
-                  axisLine={{ stroke: isDark ? '#6b7280' : '#9ca3af' }}
+          <div className="mb-6">
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e5e7eb'} />
+                  <XAxis 
+                    dataKey="category" 
+                    tick={{ fill: isDark ? '#d1d5db' : '#374151' }}
+                    axisLine={{ stroke: isDark ? '#6b7280' : '#9ca3af' }}
+                  />
+                  <YAxis 
+                    tick={{ fill: isDark ? '#d1d5db' : '#374151' }}
+                    axisLine={{ stroke: isDark ? '#6b7280' : '#9ca3af' }}
+                  />
+                  <Tooltip 
+                  formatter={(value: any, name: any) => {
+                    if (name === statement1Name) {
+                      return [`$${value.toFixed(2)}`, statement1Name];
+                    } else if (name === statement2Name) {
+                      return [`$${value.toFixed(2)}`, statement2Name];
+                    }
+                    return [`$${value.toFixed(2)}`, name];
+                  }}
                 />
-                <YAxis 
-                  tick={{ fill: isDark ? '#d1d5db' : '#374151' }}
-                  axisLine={{ stroke: isDark ? '#6b7280' : '#9ca3af' }}
-                />
-                <Tooltip formatter={(value: any) => [`$${value.toFixed(2)}`, '']} />
-                <Bar dataKey={statement1Name} fill="#3B82F6" />
-                <Bar dataKey={statement2Name} fill="#10B981" />
-              </BarChart>
-            </ResponsiveContainer>
+                  <Bar dataKey={statement1Name} fill="#3B82F6" />
+                  <Bar dataKey={statement2Name} fill="#10B981" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            
+            {/* Legend */}
+            <div className="flex items-center justify-center gap-6 mt-4">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded" style={{ backgroundColor: '#3B82F6' }}></div>
+                <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {statement1Name}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded" style={{ backgroundColor: '#10B981' }}></div>
+                <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {statement2Name}
+                </span>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1751,7 +1893,7 @@ function App() {
       
       // For spending categories, focus on withdrawals (money going out)
       // For income categories, focus on deposits (money coming in)
-      const isIncomeCategory = categoryId === 'income' || categoryId === 'refunds';
+      const isIncomeCategory = categoryId === 'income';
       
       const amount1 = isIncomeCategory ? deposits1 : withdrawals1;
       const amount2 = isIncomeCategory ? deposits2 : withdrawals2;
@@ -1781,13 +1923,176 @@ function App() {
   };
 
   const exportToPDF = () => {
-    // Implementation would use jsPDF to generate PDF report
-    alert('PDF export would be implemented here');
+    // Create a simple PDF-like report using browser print functionality
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const reportContent = `
+      <html>
+        <head>
+          <title>Bank Statement Comparison Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .summary { margin-bottom: 30px; }
+            .comparison { margin-bottom: 30px; }
+            .category { margin-bottom: 15px; padding: 10px; border: 1px solid #ccc; }
+            .statement { display: inline-block; margin-right: 20px; }
+            .amount { font-weight: bold; }
+            .difference { color: #666; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Bank Statement Comparison Report</h1>
+            <p>Generated on ${new Date().toLocaleDateString()}</p>
+          </div>
+          
+          <div class="summary">
+            <h2>Summary</h2>
+            <div class="statement">
+              <h3>${editableStatementNames.statement1}</h3>
+              <p>Total Withdrawals: $${parsedData.statement1?.totalWithdrawals.toFixed(2) || '0.00'}</p>
+              <p>Total Deposits: $${parsedData.statement1?.totalDeposits.toFixed(2) || '0.00'}</p>
+              <p>Net: $${((parsedData.statement1?.totalDeposits || 0) - (parsedData.statement1?.totalWithdrawals || 0)).toFixed(2)}</p>
+            </div>
+            <div class="statement">
+              <h3>${editableStatementNames.statement2}</h3>
+              <p>Total Withdrawals: $${parsedData.statement2?.totalWithdrawals.toFixed(2) || '0.00'}</p>
+              <p>Total Deposits: $${parsedData.statement2?.totalDeposits.toFixed(2) || '0.00'}</p>
+              <p>Net: $${((parsedData.statement2?.totalDeposits || 0) - (parsedData.statement2?.totalWithdrawals || 0)).toFixed(2)}</p>
+            </div>
+          </div>
+          
+          <div class="comparison">
+            <h2>Category Comparison</h2>
+            ${Object.entries(comparisonResults || {}).map(([categoryId, result]) => {
+              const category = categories.find(c => c.id === categoryId);
+              return `
+                <div class="category">
+                  <h3>${category?.name || categoryId}</h3>
+                  <div class="statement">
+                    <span class="amount">${editableStatementNames.statement1}: $${result.statement1.toFixed(2)}</span>
+                  </div>
+                  <div class="statement">
+                    <span class="amount">${editableStatementNames.statement2}: $${result.statement2.toFixed(2)}</span>
+                  </div>
+                  <div class="difference">
+                    <strong>Difference: $${result.difference.toFixed(2)}</strong>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+          
+          <div class="transactions">
+            <h2>Transaction Details</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Statement</th>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Date</th>
+                  <th>Amount</th>
+                  <th>Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${[
+                  ...(parsedData.statement1?.transactions || []).map(t => ({
+                    ...t,
+                    statement: editableStatementNames.statement1
+                  })),
+                  ...(parsedData.statement2?.transactions || []).map(t => ({
+                    ...t,
+                    statement: editableStatementNames.statement2
+                  }))
+                ].map(t => `
+                  <tr>
+                    <td>${t.statement}</td>
+                    <td>${categories.find(c => c.id === t.category)?.name || t.category}</td>
+                    <td>${t.description}</td>
+                    <td>${t.date}</td>
+                    <td>$${t.amount.toFixed(2)}</td>
+                    <td>${t.type}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(reportContent);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
   };
 
   const exportToCSV = () => {
-    // Implementation would generate CSV with transaction details
-    alert('CSV export would be implemented here');
+    if (!comparisonResults || !parsedData.statement1 || !parsedData.statement2) {
+      alert('No data to export');
+      return;
+    }
+
+    // Create CSV content
+    let csvContent = 'Statement,Category,Description,Date,Amount,Type\n';
+    
+    // Add transactions from both statements
+    const allTransactions = [
+      ...(parsedData.statement1.transactions || []).map(t => ({
+        ...t,
+        statement: editableStatementNames.statement1
+      })),
+      ...(parsedData.statement2.transactions || []).map(t => ({
+        ...t,
+        statement: editableStatementNames.statement2
+      }))
+    ];
+
+    allTransactions.forEach(transaction => {
+      const category = categories.find(c => c.id === transaction.category)?.name || transaction.category;
+      const row = [
+        transaction.statement,
+        category,
+        `"${transaction.description.replace(/"/g, '""')}"`, // Escape quotes in CSV
+        transaction.date,
+        transaction.amount.toFixed(2),
+        transaction.type
+      ].join(',');
+      csvContent += row + '\n';
+    });
+
+    // Add comparison summary
+    csvContent += '\nCategory Comparison\n';
+    csvContent += 'Category,Statement1,Statement2,Difference\n';
+    
+    Object.entries(comparisonResults).forEach(([categoryId, result]) => {
+      const category = categories.find(c => c.id === categoryId)?.name || categoryId;
+      const row = [
+        category,
+        result.statement1.toFixed(2),
+        result.statement2.toFixed(2),
+        result.difference.toFixed(2)
+      ].join(',');
+      csvContent += row + '\n';
+    });
+
+    // Create and download the CSV file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `bank_statement_comparison_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleTransactionEditorSave = (statementKey: 'statement1' | 'statement2', updatedTransactions: Transaction[]) => {
@@ -2003,11 +2308,89 @@ function App() {
               ? 'bg-gray-800 border-gray-700' 
               : 'bg-white border-gray-100'
           }`}>
+            {/* Overall Summary */}
+            <div className="mb-6">
+              <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                Overall Summary
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Statement 1 Summary */}
+                <div className={`p-4 rounded-lg border ${
+                  isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
+                }`}>
+                  <h4 className={`font-medium mb-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {editableStatementNames.statement1}
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Withdrawals:</span>
+                      <span className={`font-medium ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
+                        -${parsedData.statement1?.totalWithdrawals.toFixed(2) || '0.00'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Deposits:</span>
+                      <span className={`font-medium ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
+                        +${parsedData.statement1?.totalDeposits.toFixed(2) || '0.00'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-gray-300 dark:border-gray-600">
+                      <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Net:</span>
+                      <span className={`font-bold ${
+                        (parsedData.statement1?.totalDeposits || 0) - (parsedData.statement1?.totalWithdrawals || 0) >= 0
+                          ? isDarkMode ? 'text-green-400' : 'text-green-600'
+                          : isDarkMode ? 'text-red-400' : 'text-red-600'
+                      }`}>
+                        {((parsedData.statement1?.totalDeposits || 0) - (parsedData.statement1?.totalWithdrawals || 0)) >= 0 ? '+' : ''}
+                        ${((parsedData.statement1?.totalDeposits || 0) - (parsedData.statement1?.totalWithdrawals || 0)).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Statement 2 Summary */}
+                <div className={`p-4 rounded-lg border ${
+                  isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
+                }`}>
+                  <h4 className={`font-medium mb-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {editableStatementNames.statement2}
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Withdrawals:</span>
+                      <span className={`font-medium ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
+                        -${parsedData.statement2?.totalWithdrawals.toFixed(2) || '0.00'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Deposits:</span>
+                      <span className={`font-medium ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
+                        +${parsedData.statement2?.totalDeposits.toFixed(2) || '0.00'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-gray-300 dark:border-gray-600">
+                      <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Net:</span>
+                      <span className={`font-bold ${
+                        (parsedData.statement2?.totalDeposits || 0) - (parsedData.statement2?.totalWithdrawals || 0) >= 0
+                          ? isDarkMode ? 'text-green-400' : 'text-green-600'
+                          : isDarkMode ? 'text-red-400' : 'text-red-600'
+                      }`}>
+                        {((parsedData.statement2?.totalDeposits || 0) - (parsedData.statement2?.totalWithdrawals || 0)) >= 0 ? '+' : ''}
+                        ${((parsedData.statement2?.totalDeposits || 0) - (parsedData.statement2?.totalWithdrawals || 0)).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <CategorySelector
               selectedCategories={selectedCategories}
               onCategoryChange={setSelectedCategories}
               comparisonData={comparisonResults}
+              parsedData={parsedData}
               isDark={isDarkMode}
+              editableStatementNames={editableStatementNames}
             />
             
             <div className="mt-6 text-center">
@@ -2038,27 +2421,26 @@ function App() {
           <div className="space-y-6">
             <ComparisonResults
               data={comparisonResults}
-              statement1Name={parsedData.statement1?.accountHolder || 'Statement 1'}
-              statement2Name={parsedData.statement2?.accountHolder || 'Statement 2'}
-              isPreview={!isPaid}
+              statement1Name={editableStatementNames.statement1}
+              statement2Name={editableStatementNames.statement2}
+              isPreview={false}
               onUnlock={() => setShowPaywall(true)}
               isDark={isDarkMode}
             />
 
-            {isPaid && (
-              <div className={`rounded-xl p-6 shadow-lg border ${
-                isDarkMode 
-                  ? 'bg-gray-800 border-gray-700' 
-                  : 'bg-white border-gray-100'
+            <div className={`rounded-xl p-6 shadow-lg border ${
+              isDarkMode 
+                ? 'bg-gray-800 border-gray-700' 
+                : 'bg-white border-gray-100'
+            }`}>
+              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                isDarkMode ? 'text-gray-200' : 'text-gray-800'
               }`}>
-                <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                }`}>
-                  <Download className={`h-5 w-5 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
-                  Export Options
-                </h3>
-                
-                <div className="flex flex-wrap gap-4">
+                <Download className={`h-5 w-5 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
+                Export Options
+              </h3>
+              
+                              <div className="flex flex-wrap gap-4 justify-center">
                   <button
                     onClick={exportToPDF}
                     className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
@@ -2083,8 +2465,7 @@ function App() {
                     Export CSV Data
                   </button>
                 </div>
-              </div>
-            )}
+            </div>
           </div>
         )}
 
