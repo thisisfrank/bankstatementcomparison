@@ -1,16 +1,14 @@
 import React, { useState, useCallback } from 'react';
-import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, X, LogIn, UserPlus } from 'lucide-react';
+import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { loadStripe } from '@stripe/stripe-js';
-import { useAuth } from './contexts/AuthContext';
-import { ComparisonService } from './services/comparisonService';
 
 // Stripe Configuration
 const stripePromise = loadStripe('pk_test_51RrpatRD0ogceRR4A7KSSLRWPStkofC0wJ7dcOIuP1zJjL4wLccu9bu1bxSP1XnVunRP36quFSNi86ylTH8r9vU600dIEPIsdM');
 
 // API Configuration
-const API_KEY = 'api-AB7psQuumDdjVHLTPYMDghH2xUgaKcuJZVvwReMMsxM9iQBaYJg/BrelRUX07neH';
-const API_BASE_URL = 'https://api2.bankstatementconverter.com/api/v1';
+const API_KEY = import.meta.env.VITE_PDF_PARSER_API_KEY || 'api-AB7psQuumDdjVHLTPYMDghH2xUgaKcuJZVvwReMMsxM9iQBaYJg/BrelRUX07neH';
+const API_BASE_URL = import.meta.env.VITE_PDF_PARSER_API_URL || 'https://api2.bankstatementconverter.com/api/v1';
 
 interface Transaction {
   id: string;
@@ -801,6 +799,268 @@ function ComparisonResults({
   );
 }
 
+function AuthModal({ isOpen, onClose, onSignIn, isDark }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSignIn: () => void;
+  isDark: boolean;
+}) {
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      // Simulate Google authentication
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      onSignIn();
+      onClose();
+    } catch (error) {
+      setError('Google sign-in failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      // Simulate email authentication
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      if (isSignUp && !fullName.trim()) {
+        setError('Full name is required');
+        return;
+      }
+
+      if (!email.trim() || !password.trim()) {
+        setError('Email and password are required');
+        return;
+      }
+
+      onSignIn();
+      onClose();
+    } catch (error) {
+      setError('Authentication failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className={`rounded-xl max-w-md w-full p-6 relative ${
+        isDark ? 'bg-gray-800' : 'bg-white'
+      }`}>
+        <button
+          onClick={onClose}
+          className={`absolute top-4 right-4 transition-colors ${
+            isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          <X className="h-5 w-5" />
+        </button>
+        
+        <div className="text-center mb-6">
+          <div className={`p-3 rounded-full w-16 h-16 mx-auto flex items-center justify-center mb-4 ${
+            isDark ? 'bg-blue-900/30' : 'bg-blue-100'
+          }`}>
+            <Users className={`h-8 w-8 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+          </div>
+          
+          <h3 className={`text-xl font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+            {isSignUp ? 'Create Account' : 'Sign In'}
+          </h3>
+          
+          <p className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            {isSignUp 
+              ? 'Sign up to save your comparisons and get more features' 
+              : 'Sign in to access your saved comparisons'
+            }
+          </p>
+        </div>
+
+        {/* Google Sign In Button */}
+        <button
+          onClick={handleGoogleSignIn}
+          disabled={isLoading}
+          className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-200 border-2 mb-4 ${
+            isLoading
+              ? isDark 
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed border-gray-600' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed border-gray-300'
+              : isDark 
+                ? 'bg-white text-gray-800 hover:bg-gray-50 border-gray-300' 
+                : 'bg-white text-gray-800 hover:bg-gray-50 border-gray-300'
+          }`}
+        >
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Signing in with Google...
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-3">
+              <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                <span className="text-white text-xs font-bold">G</span>
+              </div>
+              Sign in with Google
+            </div>
+          )}
+        </button>
+
+        {/* Divider */}
+        <div className="relative mb-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className={`w-full border-t ${isDark ? 'border-gray-600' : 'border-gray-300'}`} />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className={`px-2 ${isDark ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-500'}`}>
+              Or
+            </span>
+          </div>
+        </div>
+
+        {/* Email Form Toggle */}
+        {!showEmailForm ? (
+          <button
+            onClick={() => setShowEmailForm(true)}
+            className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-200 border ${
+              isDark 
+                ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
+                : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            Continue with email
+          </button>
+        ) : (
+          <form onSubmit={handleEmailSubmit} className="space-y-4">
+            {isSignUp && (
+              <div>
+                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border ${
+                    isDark 
+                      ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                      : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  placeholder="Enter your full name"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`w-full px-3 py-2 rounded-lg border ${
+                  isDark 
+                    ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                    : 'bg-white border-gray-300 text-gray-900'
+                }`}
+                placeholder="Enter your email"
+              />
+            </div>
+
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={`w-full px-3 py-2 rounded-lg border ${
+                  isDark 
+                    ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                    : 'bg-white border-gray-300 text-gray-900'
+                }`}
+                placeholder="Enter your password"
+              />
+            </div>
+
+            {error && (
+              <div className={`text-sm p-3 rounded-lg ${
+                isDark ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700'
+              }`}>
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`w-full py-3 rounded-lg font-medium transition-colors ${
+                isLoading
+                  ? isDark 
+                    ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : isDark 
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              {isLoading ? (
+                <div className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {isSignUp ? 'Creating Account...' : 'Signing In...'}
+                </div>
+              ) : (
+                isSignUp ? 'Create Account' : 'Sign In'
+              )}
+            </button>
+          </form>
+        )}
+
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => {
+              setIsSignUp(!isSignUp);
+              setShowEmailForm(false);
+              setError('');
+            }}
+            className={`text-sm transition-colors ${
+              isDark ? 'text-gray-400 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
+            }`}
+          >
+            {isSignUp 
+              ? 'Already have an account? Sign in' 
+              : "Don't have an account? Sign up"
+            }
+          </button>
+        </div>
+
+        <div className="mt-4 text-center">
+          <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+            By signing up, you agree to our Terms of Service and Privacy Policy
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PaywallModal({ isOpen, onClose, onPayment, totalCategories, isDark }: {
   isOpen: boolean;
   onClose: () => void;
@@ -942,27 +1202,39 @@ function PricingPage({ isVisible, onBack, isDark }: {
 
   const plans = [
     {
+      name: 'Anonymous',
+      price: 'Free',
+      pages: '1 complete comparison',
+      description: 'No signup required',
+      priceId: null,
+      isAnonymous: true
+    },
+    {
       name: 'Free',
       price: '$0',
       pages: '30 pages per month',
+      description: 'Sign up for free',
       priceId: null
     },
     {
       name: 'Starter',
       price: '$29/month',
       pages: '150 pages per month',
+      description: 'Perfect for individuals',
       priceId: 'price_1Rrpe8RD0ogceRR4LdVUllat'
     },
     {
       name: 'Pro',
       price: '$69/month',
       pages: '400 pages per month',
-      priceId: 'price_1Rrrw7RD0ogceRR4BEdntV12'
+      description: 'Great for small teams',
+      priceId: 'price_1RrrwQRD0ogceRR4BEdntV12'
     },
     {
       name: 'Business',
       price: '$149/month',
       pages: '1,000 pages per month',
+      description: 'Enterprise solution',
       priceId: 'price_1RrrwQRD0ogceRR41ZscbkhJ'
     }
   ];
@@ -1015,27 +1287,40 @@ function PricingPage({ isVisible, onBack, isDark }: {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             {plans.map((plan, index) => (
               <div key={plan.name} className={`p-6 rounded-xl border shadow-lg ${
                 isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-              }`}>
+              } ${plan.isAnonymous ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : ''}`}>
                 <div className="text-center mb-6">
                   <h3 className={`text-xl font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                     {plan.name}
                   </h3>
-                  <div className={`text-3xl font-bold mt-3 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                  <div className={`text-3xl font-bold mt-3 ${
+                    plan.isAnonymous 
+                      ? isDark ? 'text-blue-400' : 'text-blue-600'
+                      : isDark ? 'text-blue-400' : 'text-blue-600'
+                  }`}>
                     {plan.price}
                   </div>
                   <div className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                     {plan.pages}
                   </div>
+                  {plan.description && (
+                    <div className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                      {plan.description}
+                    </div>
+                  )}
                 </div>
                 
                 <button
                   onClick={() => handleCheckout(plan.name)}
                   className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-200 ${
-                    plan.name === 'Free'
+                    plan.isAnonymous
+                      ? isDark
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
+                      : plan.name === 'Free'
                       ? isDark
                         ? 'bg-gray-600 hover:bg-gray-500 text-gray-200'
                         : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
@@ -1044,10 +1329,8 @@ function PricingPage({ isVisible, onBack, isDark }: {
                         : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
                   }`}
                 >
-                  {plan.name === 'Free' ? 'Get Started' : `Subscribe to ${plan.name}`}
+                  {plan.isAnonymous ? 'Try Now' : plan.name === 'Free' ? 'Sign Up Free' : `Subscribe to ${plan.name}`}
                 </button>
-                
-
               </div>
             ))}
           </div>
@@ -1059,16 +1342,22 @@ function PricingPage({ isVisible, onBack, isDark }: {
   );
 }
 
-function SettingsPage({ isVisible, onBack, isDark }: {
+function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode }: {
   isVisible: boolean;
   onBack: () => void;
   isDark: boolean;
+  onToggleDarkMode: () => void;
 }) {
   if (!isVisible) return null;
 
   const handleManageSubscription = () => {
     window.open('https://billing.stripe.com/p/login/test_dRmdRbcurfW97JAdhBgUM00', '_blank');
   };
+
+  // Mock credits data - will be fetched from Supabase later
+  const creditsRemaining = 380;
+  const creditsUsed = 120;
+  const totalCredits = 500;
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
@@ -1115,22 +1404,131 @@ function SettingsPage({ isVisible, onBack, isDark }: {
             </h1>
           </div>
           
-          <div className="space-y-6">
-            <div className="flex justify-center">
-              <button
-                onClick={handleManageSubscription}
-                className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 border ${
-                  isDark 
-                    ? 'bg-white text-gray-800 border-gray-300 hover:bg-gray-100' 
-                    : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                Manage Subscription
-              </button>
+          <div className="space-y-8">
+            {/* Credits Section */}
+            <div className={`p-6 rounded-lg border ${
+              isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
+            }`}>
+              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                isDark ? 'text-gray-200' : 'text-gray-800'
+              }`}>
+                <DollarSign className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+                Credits & Usage
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="text-center">
+                  <div className={`text-2xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                    {creditsRemaining}
+                  </div>
+                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Credits Remaining
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className={`text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                    {creditsUsed}
+                  </div>
+                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Credits Used
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className={`text-2xl font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {totalCredits}
+                  </div>
+                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Total Credits
+                  </div>
+                </div>
+              </div>
+              
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                <div 
+                  className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(creditsRemaining / totalCredits) * 100}%` }}
+                ></div>
+              </div>
+              <div className={`text-xs text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                {Math.round((creditsRemaining / totalCredits) * 100)}% remaining
+              </div>
+            </div>
+
+            {/* Dark Mode Toggle */}
+            <div className={`p-6 rounded-lg border ${
+              isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
+            }`}>
+              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                isDark ? 'text-gray-200' : 'text-gray-800'
+              }`}>
+                {isDark ? (
+                  <Moon className={`h-5 w-5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                ) : (
+                  <Sun className={`h-5 w-5 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
+                )}
+                Appearance
+              </h3>
+              
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                    Dark Mode
+                  </div>
+                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Switch between light and dark themes
+                  </div>
+                </div>
+                <button
+                  onClick={onToggleDarkMode}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    isDark 
+                      ? 'bg-blue-600' 
+                      : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      isDark ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Subscription Management */}
+            <div className={`p-6 rounded-lg border ${
+              isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
+            }`}>
+              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                isDark ? 'text-gray-200' : 'text-gray-800'
+              }`}>
+                <CreditCard className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                Subscription
+              </h3>
+              
+              <div className="flex justify-center">
+                <button
+                  onClick={handleManageSubscription}
+                  className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 border ${
+                    isDark 
+                      ? 'bg-white text-gray-800 border-gray-300 hover:bg-gray-100' 
+                      : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Manage Subscription
+                </button>
+              </div>
             </div>
             
-            <div className="border-t pt-6">
-              <h3 className={`text-lg font-semibold mb-4 text-center ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+            {/* Share App */}
+            <div className={`p-6 rounded-lg border ${
+              isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
+            }`}>
+              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                isDark ? 'text-gray-200' : 'text-gray-800'
+              }`}>
+                <Users className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
                 Share App
               </h3>
               <div className="flex items-center justify-center gap-3">
@@ -1311,39 +1709,8 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
 }) {
   if (!isVisible) return null;
 
-  // Sample past documents data
-  const pastDocuments = [
-    {
-      id: '1',
-      date: '2 August 2025',
-      statement1Name: 'Chase Bank Statement',
-      statement2Name: 'Wells Fargo Statement',
-      categories: ['groceries', 'entertainment', 'transportation'],
-      totalWithdrawals: 2847.50,
-      totalDeposits: 3200.00,
-      status: 'completed'
-    },
-    {
-      id: '2',
-      date: '1 August 2025',
-      statement1Name: 'Bank of America Statement',
-      statement2Name: 'Credit Union Statement',
-      categories: ['utilities', 'dining', 'shopping'],
-      totalWithdrawals: 1892.30,
-      totalDeposits: 2500.00,
-      status: 'completed'
-    },
-    {
-      id: '3',
-      date: '31 July 2025',
-      statement1Name: 'Citibank Statement',
-      statement2Name: 'PNC Bank Statement',
-      categories: ['healthcare', 'education', 'travel'],
-      totalWithdrawals: 3421.75,
-      totalDeposits: 4100.00,
-      status: 'completed'
-    }
-  ];
+  // Real past documents data - will be fetched from Supabase
+  const pastDocuments: any[] = []; // Empty array for now, will be populated from database
 
   const handleDownloadPDF = (documentId: string) => {
     // In a real app, this would download the actual PDF
@@ -1410,92 +1777,100 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
         </div>
         
         <div className="grid gap-6">
-          {pastDocuments.map((doc) => (
-            <div key={doc.id} className={`rounded-xl border shadow-lg p-6 ${
-              isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-            }`}>
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                    {doc.statement1Name} vs {doc.statement2Name}
-                  </h3>
-                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    {doc.date} • {doc.categories.length} categories compared
-                  </p>
+          {pastDocuments.length > 0 ? (
+            pastDocuments.map((doc) => (
+              <div key={doc.id} className={`rounded-xl border shadow-lg p-6 ${
+                isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+              }`}>
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                      {doc.statement1Name} vs {doc.statement2Name}
+                    </h3>
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {doc.date} • {doc.categories.length} categories compared
+                    </p>
+                  </div>
+                  <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    doc.status === 'completed' 
+                      ? isDark ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-800'
+                      : isDark ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {doc.status}
+                  </div>
                 </div>
-                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  doc.status === 'completed' 
-                    ? isDark ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-800'
-                    : isDark ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {doc.status}
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className={`p-4 rounded-lg ${
+                    isDark ? 'bg-gray-700/50' : 'bg-gray-50'
+                  }`}>
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Categories</p>
+                    <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                      {doc.categories.join(', ')}
+                    </p>
+                  </div>
+                  <div className={`p-4 rounded-lg ${
+                    isDark ? 'bg-gray-700/50' : 'bg-gray-50'
+                  }`}>
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Withdrawals</p>
+                    <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                      ${doc.totalWithdrawals.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className={`p-4 rounded-lg ${
+                    isDark ? 'bg-gray-700/50' : 'bg-gray-50'
+                  }`}>
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Deposits</p>
+                    <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                      ${doc.totalDeposits.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => handleDownloadPDF(doc.id)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${
+                      isDark 
+                        ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105' 
+                        : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
+                    }`}
+                  >
+                    <Download className="h-4 w-4" />
+                    Download PDF
+                  </button>
+                  <button
+                    onClick={() => handleDownloadCSV(doc.id)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 border ${
+                      isDark 
+                        ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
+                        : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Download className="h-4 w-4" />
+                    Download CSV
+                  </button>
+                  <button
+                    onClick={() => handleRedoComparison(doc.id)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 border ${
+                      isDark 
+                        ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
+                        : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                    Redo Comparison
+                  </button>
                 </div>
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className={`p-4 rounded-lg ${
-                  isDark ? 'bg-gray-700/50' : 'bg-gray-50'
-                }`}>
-                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Categories</p>
-                  <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                    {doc.categories.join(', ')}
-                  </p>
-                </div>
-                <div className={`p-4 rounded-lg ${
-                  isDark ? 'bg-gray-700/50' : 'bg-gray-50'
-                }`}>
-                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Withdrawals</p>
-                  <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                    ${doc.totalWithdrawals.toLocaleString()}
-                  </p>
-                </div>
-                <div className={`p-4 rounded-lg ${
-                  isDark ? 'bg-gray-700/50' : 'bg-gray-50'
-                }`}>
-                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Deposits</p>
-                  <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                    ${doc.totalDeposits.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => handleDownloadPDF(doc.id)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${
-                    isDark 
-                      ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105' 
-                      : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
-                  }`}
-                >
-                  <Download className="h-4 w-4" />
-                  Download PDF
-                </button>
-                <button
-                  onClick={() => handleDownloadCSV(doc.id)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 border ${
-                    isDark 
-                      ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
-                      : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  <Download className="h-4 w-4" />
-                  Download CSV
-                </button>
-                <button
-                  onClick={() => handleRedoComparison(doc.id)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 border ${
-                    isDark 
-                      ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
-                      : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  <BarChart3 className="h-4 w-4" />
-                  Redo Comparison
-                </button>
-              </div>
+            ))
+          ) : (
+            <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              <BarChart3 className={`mx-auto h-12 w-12 mb-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+              <h3 className="text-lg font-medium mb-2">No comparisons yet</h3>
+              <p className="text-sm">Create your first bank statement comparison to see it here</p>
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>
@@ -1816,8 +2191,19 @@ function TransactionEditForm({
   );
 }
 
+// Anonymous usage tracking
+const ANONYMOUS_KEY = 'anonymous_comparison_used';
+
+const getAnonymousUsage = () => {
+  const stored = localStorage.getItem(ANONYMOUS_KEY);
+  return stored === 'true';
+};
+
+const setAnonymousUsage = () => {
+  localStorage.setItem(ANONYMOUS_KEY, 'true');
+};
+
 function App() {
-  const { user, loading, signIn, signUp, signOut } = useAuth();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [files, setFiles] = useState<{ statement1: File | null; statement2: File | null }>({
     statement1: null,
@@ -1851,26 +2237,20 @@ function App() {
   const [showUsagePage, setShowUsagePage] = useState(false);
   const [showPastDocumentsPage, setShowPastDocumentsPage] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [isSignedIn, setIsSignedIn] = useState(false); // Simulate signed in state
 
   const parser = new BankStatementParser();
 
-  // Load user profile when user is authenticated
-  React.useEffect(() => {
-    if (user) {
-      ComparisonService.getUserProfile(user.id)
-        .then(profile => setUserProfile(profile))
-        .catch(error => console.error('Error loading user profile:', error));
-    } else {
-      setUserProfile(null);
-    }
-  }, [user]);
-
   const handleFileUpload = async (statementKey: 'statement1' | 'statement2', file: File) => {
+    // Check anonymous usage if user is not signed in
+    if (!isSignedIn) {
+      const hasUsedAnonymous = getAnonymousUsage();
+      if (hasUsedAnonymous) {
+        alert('You have already used your free anonymous comparison. Please sign up for more comparisons!');
+        return;
+      }
+    }
+    
     setFiles(prev => ({ ...prev, [statementKey]: file }));
     setUploading(prev => ({ ...prev, [statementKey]: true }));
     
@@ -1887,6 +2267,11 @@ function App() {
   const generateComparison = () => {
     if (!parsedData.statement1 || !parsedData.statement2 || selectedCategories.length === 0) {
       return;
+    }
+
+    // Mark anonymous usage if user is not signed in
+    if (!isSignedIn) {
+      setAnonymousUsage();
     }
 
     const comparison: { [key: string]: ComparisonResult } = {};
@@ -2144,8 +2529,6 @@ function App() {
             ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
             : 'bg-gradient-to-br from-blue-50 via-white to-green-50'
         }`}>
-          <DarkModeToggle isDark={isDarkMode} onToggle={() => setIsDarkMode(!isDarkMode)} />
-          
           {/* Navigation Header */}
           <div className={`sticky top-0 z-40 backdrop-blur-sm border-b ${
             isDarkMode ? 'bg-gray-900/80 border-gray-700' : 'bg-white/80 border-gray-200'
@@ -2167,8 +2550,27 @@ function App() {
                 </div>
                 
                 <nav className="flex items-center gap-6">
-                  {!user ? (
+                  {!isSignedIn ? (
                     <>
+                      {/* Anonymous usage indicator */}
+                      {getAnonymousUsage() ? (
+                        <div className={`text-xs px-2 py-1 rounded-full ${
+                          isDarkMode 
+                            ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-600' 
+                            : 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                        }`}>
+                          Free trial used
+                        </div>
+                      ) : (
+                        <div className={`text-xs px-2 py-1 rounded-full ${
+                          isDarkMode 
+                            ? 'bg-green-900/30 text-green-400 border border-green-600' 
+                            : 'bg-green-100 text-green-800 border border-green-300'
+                        }`}>
+                          1 free comparison
+                        </div>
+                      )}
+                      
                       <button 
                         onClick={() => setShowPricingModal(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
@@ -2176,14 +2578,6 @@ function App() {
                         }`}
                       >
                         Pricing
-                      </button>
-                      <button 
-                        onClick={() => setShowPastDocumentsPage(true)}
-                        className={`text-sm font-medium transition-colors hover:scale-105 ${
-                          isDarkMode ? 'text-gray-300 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
-                        }`}
-                      >
-                        Past Documents
                       </button>
                       <button 
                         onClick={() => setShowSettingsPage(true)}
@@ -2206,9 +2600,14 @@ function App() {
                     </>
                   ) : (
                     <>
-                      <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                        Credits: {userProfile?.credits || 0}
-                      </div>
+                      <button 
+                        onClick={() => setShowPastDocumentsPage(true)}
+                        className={`text-sm font-medium transition-colors hover:scale-105 ${
+                          isDarkMode ? 'text-gray-300 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
+                        }`}
+                      >
+                        Past Documents
+                      </button>
                       <button 
                         onClick={() => setShowUsagePage(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
@@ -2226,7 +2625,7 @@ function App() {
                         Settings
                       </button>
                       <button 
-                        onClick={() => signOut()}
+                        onClick={() => setIsSignedIn(false)}
                         className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                           isDarkMode 
                             ? 'bg-gray-600 text-white hover:bg-gray-700 hover:scale-105' 
@@ -2694,108 +3093,12 @@ function App() {
           isDark={isDarkMode}
         />
         
-        {/* Authentication Modal */}
-        {showAuthModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className={`rounded-xl max-w-md w-full p-6 relative ${
-              isDarkMode ? 'bg-gray-800' : 'bg-white'
-            }`}>
-              <button
-                onClick={() => setShowAuthModal(false)}
-                className={`absolute top-4 right-4 transition-colors ${
-                  isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'
-                }`}
-              >
-                <X className="h-6 w-6" />
-              </button>
-              
-              <div className="text-center space-y-4">
-                <div className={`p-3 rounded-full w-16 h-16 mx-auto flex items-center justify-center ${
-                  isDarkMode ? 'bg-blue-900/30' : 'bg-blue-100'
-                }`}>
-                  {authMode === 'signin' ? (
-                    <LogIn className={`h-8 w-8 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                  ) : (
-                    <UserPlus className={`h-8 w-8 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                  )}
-                </div>
-                
-                <h3 className={`text-xl font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                  {authMode === 'signin' ? 'Sign In' : 'Create Account'}
-                </h3>
-                
-                {authError && (
-                  <div className={`p-3 rounded-lg text-sm ${
-                    isDarkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700'
-                  }`}>
-                    {authError}
-                  </div>
-                )}
-                
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  setAuthError('');
-                  try {
-                    if (authMode === 'signin') {
-                      await signIn(authEmail, authPassword);
-                    } else {
-                      await signUp(authEmail, authPassword);
-                    }
-                    setShowAuthModal(false);
-                    setAuthEmail('');
-                    setAuthPassword('');
-                  } catch (error: any) {
-                    setAuthError(error.message);
-                  }
-                }} className="space-y-4">
-                  <input
-                    type="email"
-                    placeholder="Email"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    className={`w-full px-4 py-3 rounded-lg border ${
-                      isDarkMode 
-                        ? 'bg-gray-700 border-gray-600 text-gray-200' 
-                        : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    required
-                  />
-                  <input
-                    type="password"
-                    placeholder="Password"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    className={`w-full px-4 py-3 rounded-lg border ${
-                      isDarkMode 
-                        ? 'bg-gray-700 border-gray-600 text-gray-200' 
-                        : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className={`w-full py-3 rounded-lg transition-colors font-medium ${
-                      isDarkMode 
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                        : 'bg-blue-600 hover:bg-blue-700 text-white'
-                    }`}
-                  >
-                    {authMode === 'signin' ? 'Sign In' : 'Create Account'}
-                  </button>
-                </form>
-                
-                <button
-                  onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
-                  className={`text-sm transition-colors ${
-                    isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-800'
-                  }`}
-                >
-                  {authMode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          onSignIn={() => setIsSignedIn(true)}
+          isDark={isDarkMode}
+        />
           </div>
         </div>
       ) : showPricingModal ? (
@@ -2809,6 +3112,7 @@ function App() {
           isVisible={showSettingsPage}
           onBack={() => setShowSettingsPage(false)}
           isDark={isDarkMode}
+          onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
         />
       ) : showUsagePage ? (
         <UsagePage
