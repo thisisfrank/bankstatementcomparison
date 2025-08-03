@@ -1,7 +1,9 @@
 import React, { useState, useCallback } from 'react';
-import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, X } from 'lucide-react';
+import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, X, LogIn, UserPlus } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { loadStripe } from '@stripe/stripe-js';
+import { useAuth } from './contexts/AuthContext';
+import { ComparisonService } from './services/comparisonService';
 
 // Stripe Configuration
 const stripePromise = loadStripe('pk_test_51RrpatRD0ogceRR4A7KSSLRWPStkofC0wJ7dcOIuP1zJjL4wLccu9bu1bxSP1XnVunRP36quFSNi86ylTH8r9vU600dIEPIsdM');
@@ -1815,6 +1817,7 @@ function TransactionEditForm({
 }
 
 function App() {
+  const { user, loading, signIn, signUp, signOut } = useAuth();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [files, setFiles] = useState<{ statement1: File | null; statement2: File | null }>({
     statement1: null,
@@ -1847,9 +1850,25 @@ function App() {
   const [showSettingsPage, setShowSettingsPage] = useState(false);
   const [showUsagePage, setShowUsagePage] = useState(false);
   const [showPastDocumentsPage, setShowPastDocumentsPage] = useState(false);
-  const [isSignedIn, setIsSignedIn] = useState(false); // Simulate signed in state
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   const parser = new BankStatementParser();
+
+  // Load user profile when user is authenticated
+  React.useEffect(() => {
+    if (user) {
+      ComparisonService.getUserProfile(user.id)
+        .then(profile => setUserProfile(profile))
+        .catch(error => console.error('Error loading user profile:', error));
+    } else {
+      setUserProfile(null);
+    }
+  }, [user]);
 
   const handleFileUpload = async (statementKey: 'statement1' | 'statement2', file: File) => {
     setFiles(prev => ({ ...prev, [statementKey]: file }));
@@ -2148,7 +2167,7 @@ function App() {
                 </div>
                 
                 <nav className="flex items-center gap-6">
-                  {!isSignedIn ? (
+                  {!user ? (
                     <>
                       <button 
                         onClick={() => setShowPricingModal(true)}
@@ -2175,7 +2194,7 @@ function App() {
                         Settings
                       </button>
                       <button 
-                        onClick={() => setIsSignedIn(true)}
+                        onClick={() => setShowAuthModal(true)}
                         className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                           isDarkMode 
                             ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105' 
@@ -2187,6 +2206,9 @@ function App() {
                     </>
                   ) : (
                     <>
+                      <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                        Credits: {userProfile?.credits || 0}
+                      </div>
                       <button 
                         onClick={() => setShowUsagePage(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
@@ -2204,7 +2226,7 @@ function App() {
                         Settings
                       </button>
                       <button 
-                        onClick={() => setIsSignedIn(false)}
+                        onClick={() => signOut()}
                         className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                           isDarkMode 
                             ? 'bg-gray-600 text-white hover:bg-gray-700 hover:scale-105' 
@@ -2671,6 +2693,109 @@ function App() {
           totalCategories={selectedCategories.length}
           isDark={isDarkMode}
         />
+        
+        {/* Authentication Modal */}
+        {showAuthModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className={`rounded-xl max-w-md w-full p-6 relative ${
+              isDarkMode ? 'bg-gray-800' : 'bg-white'
+            }`}>
+              <button
+                onClick={() => setShowAuthModal(false)}
+                className={`absolute top-4 right-4 transition-colors ${
+                  isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                <X className="h-6 w-6" />
+              </button>
+              
+              <div className="text-center space-y-4">
+                <div className={`p-3 rounded-full w-16 h-16 mx-auto flex items-center justify-center ${
+                  isDarkMode ? 'bg-blue-900/30' : 'bg-blue-100'
+                }`}>
+                  {authMode === 'signin' ? (
+                    <LogIn className={`h-8 w-8 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                  ) : (
+                    <UserPlus className={`h-8 w-8 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                  )}
+                </div>
+                
+                <h3 className={`text-xl font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                  {authMode === 'signin' ? 'Sign In' : 'Create Account'}
+                </h3>
+                
+                {authError && (
+                  <div className={`p-3 rounded-lg text-sm ${
+                    isDarkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700'
+                  }`}>
+                    {authError}
+                  </div>
+                )}
+                
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  setAuthError('');
+                  try {
+                    if (authMode === 'signin') {
+                      await signIn(authEmail, authPassword);
+                    } else {
+                      await signUp(authEmail, authPassword);
+                    }
+                    setShowAuthModal(false);
+                    setAuthEmail('');
+                    setAuthPassword('');
+                  } catch (error: any) {
+                    setAuthError(error.message);
+                  }
+                }} className="space-y-4">
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className={`w-full px-4 py-3 rounded-lg border ${
+                      isDarkMode 
+                        ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                        : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    required
+                  />
+                  <input
+                    type="password"
+                    placeholder="Password"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className={`w-full px-4 py-3 rounded-lg border ${
+                      isDarkMode 
+                        ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                        : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className={`w-full py-3 rounded-lg transition-colors font-medium ${
+                      isDarkMode 
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    {authMode === 'signin' ? 'Sign In' : 'Create Account'}
+                  </button>
+                </form>
+                
+                <button
+                  onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
+                  className={`text-sm transition-colors ${
+                    isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  {authMode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
           </div>
         </div>
       ) : showPricingModal ? (
