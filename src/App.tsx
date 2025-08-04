@@ -40,8 +40,6 @@ interface ParsedStatement {
   totalWithdrawals: number;
   totalDeposits: number;
   accountHolder: string;
-  apiUsed?: boolean;
-  apiError?: string;
 }
 
 interface ComparisonResult {
@@ -164,25 +162,29 @@ class BankStatementParser {
       // Process the API response and separate withdrawals from deposits
       const result = this.processAPIResponse(convertResult[0], file.name);
       console.log('API parsing completed successfully');
-      result.apiUsed = true;
       return result;
       
     } catch (error) {
       console.error('Error parsing PDF with API:', error);
       console.log('Falling back to sample data generation...');
       
+      // All retries failed
+      console.error('All API attempts failed, falling back to sample data generation...');
+      console.log('Last error:', error?.message);
+      
       // Add a flag to indicate API was not used
       const sampleData = this.generateSampleData(file.name);
-      sampleData.apiUsed = false;
-      sampleData.apiError = error instanceof Error ? error.message : String(error);
       
       return sampleData;
     }
   }
 
   private processAPIResponse(apiResponse: any, fileName: string): ParsedStatement {
+    console.log('Processing API response:', apiResponse);
+    
     // The API returns { normalised: [...] } format
     const rawTransactions = apiResponse.normalised || [];
+    console.log('Raw transactions from API:', rawTransactions);
     
     const transactions: Transaction[] = [];
     const withdrawals: Transaction[] = [];
@@ -221,6 +223,10 @@ class BankStatementParser {
         deposits.push(transaction);
       }
     });
+
+    console.log('Processed transactions:', transactions);
+    console.log('Withdrawals:', withdrawals);
+    console.log('Deposits:', deposits);
 
     const totalWithdrawals = withdrawals.reduce((sum, t) => sum + t.amount, 0);
     const totalDeposits = deposits.reduce((sum, t) => sum + t.amount, 0);

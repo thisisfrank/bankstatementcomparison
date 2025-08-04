@@ -1,0 +1,217 @@
+[33mcommit 5e8b5b3a2b93f97ca63b80e77e6f76d6b9b2ec5b[m
+Author: Frank <thisisfrankgonzalez@gmail.com>
+Date:   Sun Aug 3 23:32:45 2025 -0700
+
+    Add API debugging and error handling improvements - Enhanced error logging with detailed API call information - Added visual indicators showing API status in UI - Added API configuration logging on startup - Created environment variable setup documentation - Added retry logic for API failures - Improved error messages with specific details - Added hover tooltips for API error information
+
+[1mdiff --git a/src/App.tsx b/src/App.tsx[m
+[1mindex 3653523..c878453 100644[m
+[1m--- a/src/App.tsx[m
+[1m+++ b/src/App.tsx[m
+[36m@@ -14,6 +14,16 @@[m [mconst stripePromise = loadStripe('pk_test_51RrpatRD0ogceRR4A7KSSLRWPStkofC0wJ7dc[m
+ const API_KEY = import.meta.env.VITE_PDF_PARSER_API_KEY || 'api-AB7psQuumDdjVHLTPYMDghH2xUgaKcuJZVvwReMMsxM9iQBaYJg/BrelRUX07neH';[m
+ const API_BASE_URL = import.meta.env.VITE_PDF_PARSER_API_URL || 'https://api2.bankstatementconverter.com/api/v1';[m
+ [m
+[32m+[m[32m// Log API configuration for debugging[m
+[32m+[m[32mconsole.log('API Configuration:', {[m
+[32m+[m[32m  API_BASE_URL,[m
+[32m+[m[32m  API_KEY: API_KEY ? '***' + API_KEY.slice(-4) : 'Not set',[m
+[32m+[m[32m  envVars: {[m
+[32m+[m[32m    VITE_PDF_PARSER_API_KEY: import.meta.env.VITE_PDF_PARSER_API_KEY ? 'Set' : 'Not set',[m
+[32m+[m[32m    VITE_PDF_PARSER_API_URL: import.meta.env.VITE_PDF_PARSER_API_URL ? 'Set' : 'Not set'[m
+[32m+[m[32m  }[m
+[32m+[m[32m});[m
+[32m+[m
+ interface Transaction {[m
+   id: string;[m
+   date: string;[m
+[36m@@ -30,6 +40,8 @@[m [minterface ParsedStatement {[m
+   totalWithdrawals: number;[m
+   totalDeposits: number;[m
+   accountHolder: string;[m
+[32m+[m[32m  apiUsed?: boolean;[m
+[32m+[m[32m  apiError?: string;[m
+ }[m
+ [m
+ interface ComparisonResult {[m
+[36m@@ -63,10 +75,15 @@[m [mclass BankStatementParser {[m
+ [m
+   async parsePDF(file: File): Promise<ParsedStatement> {[m
+     try {[m
+[32m+[m[32m      console.log('Starting PDF parsing with API:', API_BASE_URL);[m
+[32m+[m[41m      [m
+[32m+[m
+[32m+[m[41m      [m
+       // Step 1: Upload the PDF file[m
+       const formData = new FormData();[m
+       formData.append('file', file);[m
+ [m
+[32m+[m[32m      console.log('Uploading file to API...');[m
+       const uploadResponse = await fetch(`${API_BASE_URL}/BankStatement`, {[m
+         method: 'POST',[m
+         headers: {[m
+[36m@@ -76,19 +93,29 @@[m [mclass BankStatementParser {[m
+       });[m
+ [m
+       if (!uploadResponse.ok) {[m
+[31m-        throw new Error(`Upload failed: ${uploadResponse.status}`);[m
+[32m+[m[32m        const errorText = await uploadResponse.text();[m
+[32m+[m[32m        console.error(`Upload failed with status ${uploadResponse.status}:`, errorText);[m
+[32m+[m[32m        throw new Error(`Upload failed: ${uploadResponse.status} - ${errorText}`);[m
+       }[m
+ [m
+       const uploadResult = await uploadResponse.json();[m
+[32m+[m[32m      console.log('Upload successful, result:', uploadResult);[m
+[32m+[m[41m      [m
+       const uuid = uploadResult[0].uuid;[m
+       const state = uploadResult[0].state;[m
+ [m
+       // Step 2: Check if processing is needed (for image-based PDFs)[m
+       if (state === 'PROCESSING') {[m
+[32m+[m[32m        console.log('File is processing, waiting for completion...');[m
+         let currentState = state;[m
+[31m-        while (currentState === 'PROCESSING') {[m
+[32m+[m[32m        let attempts = 0;[m
+[32m+[m[32m        const maxAttempts = 30; // 5 minutes max wait time[m
+[32m+[m[41m        [m
+[32m+[m[32m        while (currentState === 'PROCESSING' && attempts < maxAttempts) {[m
+           await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds[m
+[32m+[m[32m          attempts++;[m
+           [m
+[32m+[m[32m          console.log(`Status check attempt ${attempts}/${maxAttempts}...`);[m
+           const statusResponse = await fetch(`${API_BASE_URL}/BankStatement/status`, {[m
+             method: 'POST',[m
+             headers: {[m
+[36m@@ -99,15 +126,23 @@[m [mclass BankStatementParser {[m
+           });[m
+ [m
+           if (!statusResponse.ok) {[m
+[31m-            throw new Error(`Status check failed: ${statusResponse.status}`);[m
+[32m+[m[32m            const errorText = await statusResponse.text();[m
+[32m+[m[32m            console.error(`Status check failed with status ${statusResponse.status}:`, errorText);[m
+[32m+[m[32m            throw new Error(`Status check failed: ${statusResponse.status} - ${errorText}`);[m
+           }[m
+ [m
+           const statusResult = await statusResponse.json();[m
+           currentState = statusResult[0].state;[m
+[32m+[m[32m          console.log('Current state:', currentState);[m
+[32m+[m[32m        }[m
+[32m+[m[41m        [m
+[32m+[m[32m        if (attempts >= maxAttempts) {[m
+[32m+[m[32m          throw new Error('Processing timeout - file took too long to process');[m
+         }[m
+       }[m
+ [m
+       // Step 3: Convert the statement to JSON[m
+[32m+[m[32m      console.log('Converting statement to JSON...');[m
+       const convertResponse = await fetch(`${API_BASE_URL}/BankStatement/convert?format=JSON`, {[m
+         method: 'POST',[m
+         headers: {[m
+[36m@@ -118,18 +153,30 @@[m [mclass BankStatementParser {[m
+       });[m
+ [m
+       if (!convertResponse.ok) {[m
+[31m-        throw new Error(`Conversion failed: ${convertResponse.status}`);[m
+[32m+[m[32m        const errorText = await convertResponse.text();[m
+[32m+[m[32m        console.error(`Conversion failed with status ${convertResponse.status}:`, errorText);[m
+[32m+[m[32m        throw new Error(`Conversion failed: ${convertResponse.status} - ${errorText}`);[m
+       }[m
+ [m
+       const convertResult = await convertResponse.json();[m
+[32m+[m[32m      console.log('Conversion successful, processing response...');[m
+       [m
+       // Process the API response and separate withdrawals from deposits[m
+[31m-      return this.processAPIResponse(convertResult[0], file.name);[m
+[32m+[m[32m      const result = this.processAPIResponse(convertResult[0], file.name);[m
+[32m+[m[32m      console.log('API parsing completed successfully');[m
+[32m+[m[32m      result.apiUsed = true;[m
+[32m+[m[32m      return result;[m
+       [m
+     } catch (error) {[m
+[31m-      console.error('Error parsing PDF:', error);[m
+[31m-      // Fallback to sample data if API fails[m
+[31m-      return this.generateSampleData(file.name);[m
+[32m+[m[32m      console.error('Error parsing PDF with API:', error);[m
+[32m+[m[32m      console.log('Falling back to sample data generation...');[m
+[32m+[m[41m      [m
+[32m+[m[32m      // Add a flag to indicate API was not used[m
+[32m+[m[32m      const sampleData = this.generateSampleData(file.name);[m
+[32m+[m[32m      sampleData.apiUsed = false;[m
+[32m+[m[32m      sampleData.apiError = error instanceof Error ? error.message : String(error);[m
+[32m+[m[41m      [m
+[32m+[m[32m      return sampleData;[m
+     }[m
+   }[m
+ [m
+[36m@@ -443,6 +490,24 @@[m [mfunction FileUploadZone({[m
+                 <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>[m
+                   Ready for comparison[m
+                 </p>[m
+[32m+[m[32m                {parsedData && ([m
+[32m+[m[32m                  <div className="mt-2">[m
+[32m+[m[32m                    {parsedData.apiUsed === false ? ([m
+[32m+[m[32m                      <div[m[41m [m
+[32m+[m[32m                        className={`flex items-center gap-1 text-xs ${isDark ? 'text-yellow-400' : 'text-yellow-600'} cursor-help`}[m
+[32m+[m[32m                        title={parsedData.apiError ? `API Error: ${parsedData.apiError}` : 'API unavailable'}[m
+[32m+[m[32m                      >[m
+[32m+[m[32m                        <AlertCircle className="h-3 w-3" />[m
+[32m+[m[32m                        <span>Using sample data (API unavailable)</span>[m
+[32m+[m[32m                      </div>[m
+[32m+[m[32m                    ) : parsedData.apiUsed === true ? ([m
+[32m+[m[32m                      <div className={`flex items-center gap-1 text-xs ${isDark ? 'text-green-400' : 'text-green-600'}`}>[m
+[32m+[m[32m                        <CheckCircle className="h-3 w-3" />[m
+[32m+[m[32m                        <span>Parsed with API</span>[m
+[32m+[m[32m                      </div>[m
+[32m+[m[32m                    ) : null}[m
+[32m+[m[32m                  </div>[m
+[32m+[m[32m                )}[m
+               </div>[m
+             </>[m
+           ) : ([m
+[36m@@ -2439,6 +2504,7 @@[m [mfunction App() {[m
+   const [userTier, setUserTier] = useState<string | undefined>(undefined);[m
+ [m
+   const [comparisonGenerated, setComparisonGenerated] = useState(false);[m
+[32m+[m[32m  const [isGeneratingComparison, setIsGeneratingComparison] = useState(false);[m
+ [m
+   // Check authentication status on component mount[m
+   useEffect(() => {[m
+[36m@@ -2476,6 +2542,7 @@[m [mfunction App() {[m
+       return;[m
+     }[m
+ [m
+[32m+[m[32m    setIsGeneratingComparison(true);[m
+     setUploading({ statement1: true, statement2: true });[m
+     [m
+     try {[m
+[36m@@ -2599,6 +2666,7 @@[m [mfunction App() {[m
+       alert('Error processing PDFs. Please try again.');[m
+     } finally {[m
+       setUploading({ statement1: false, statement2: false });[m
+[32m+[m[32m      setIsGeneratingComparison(false);[m
+     }[m
+   };[m
+ [m
+[36m@@ -3000,13 +3068,18 @@[m [mfunction App() {[m
+           <div className="text-center mb-8">[m
+             <button[m
+               onClick={generateComparison}[m
+[32m+[m[32m              disabled={isGeneratingComparison}[m
+               className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 ${[m
+[31m-                isDarkMode [m
+[31m-                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl' [m
+[31m-                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'[m
+[32m+[m[32m                isGeneratingComparison[m
+[32m+[m[32m                  ? isDarkMode[m[41m [m
+[32m+[m[32m                    ? 'bg-gray-500 text-gray-300 cursor-not-allowed shadow-lg'[m[41m [m
+[32m+[m[32m                    : 'bg-gray-400 text-gray-600 cursor-not-allowed shadow-lg'[m
+[32m+[m[32m                  : isDarkMode[m[41m [m
+[32m+[m[32m                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'[m[41m [m
+[32m+[m[32m                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'[m
+               }`}[m
+             >[m
+[31m-              Generate Comparison[m
+[32m+[m[32m              {isGeneratingComparison ? 'Generating...' : 'Generate Comparison'}[m
+             </button>[m
+             <p className={`text-sm mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>[m
+               This will process all categories and charge based on pages processed[m
