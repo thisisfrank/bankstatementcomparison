@@ -10,20 +10,6 @@ A web application for comparing bank statements and analyzing spending patterns.
 - Visual charts and analytics
 - Export results to PDF/CSV
 
-## Environment Variables
-
-Set these in your production environment:
-
-```
-VITE_PDF_PARSER_API_KEY=your_api_key_here
-VITE_PDF_PARSER_API_URL=https://api2.bankstatementconverter.com/api/v1
-```
-
-## Development
-
-```bash
-npm install
-npm run dev
 ```
 
 ## Deployment
