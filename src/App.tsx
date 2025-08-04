@@ -14,6 +14,16 @@ const stripePromise = loadStripe('pk_test_51RrpatRD0ogceRR4A7KSSLRWPStkofC0wJ7dc
 const API_KEY = import.meta.env.VITE_PDF_PARSER_API_KEY || 'api-AB7psQuumDdjVHLTPYMDghH2xUgaKcuJZVvwReMMsxM9iQBaYJg/BrelRUX07neH';
 const API_BASE_URL = import.meta.env.VITE_PDF_PARSER_API_URL || 'https://api2.bankstatementconverter.com/api/v1';
 
+// Log API configuration for debugging
+console.log('API Configuration:', {
+  API_BASE_URL,
+  API_KEY: API_KEY ? '***' + API_KEY.slice(-4) : 'Not set',
+  envVars: {
+    VITE_PDF_PARSER_API_KEY: import.meta.env.VITE_PDF_PARSER_API_KEY ? 'Set' : 'Not set',
+    VITE_PDF_PARSER_API_URL: import.meta.env.VITE_PDF_PARSER_API_URL ? 'Set' : 'Not set'
+  }
+});
+
 interface Transaction {
   id: string;
   date: string;
@@ -30,6 +40,8 @@ interface ParsedStatement {
   totalWithdrawals: number;
   totalDeposits: number;
   accountHolder: string;
+  apiUsed?: boolean;
+  apiError?: string;
 }
 
 interface ComparisonResult {
@@ -63,10 +75,15 @@ class BankStatementParser {
 
   async parsePDF(file: File): Promise<ParsedStatement> {
     try {
+      console.log('Starting PDF parsing with API:', API_BASE_URL);
+      
+
+      
       // Step 1: Upload the PDF file
       const formData = new FormData();
       formData.append('file', file);
 
+      console.log('Uploading file to API...');
       const uploadResponse = await fetch(`${API_BASE_URL}/BankStatement`, {
         method: 'POST',
         headers: {
@@ -76,19 +93,29 @@ class BankStatementParser {
       });
 
       if (!uploadResponse.ok) {
-        throw new Error(`Upload failed: ${uploadResponse.status}`);
+        const errorText = await uploadResponse.text();
+        console.error(`Upload failed with status ${uploadResponse.status}:`, errorText);
+        throw new Error(`Upload failed: ${uploadResponse.status} - ${errorText}`);
       }
 
       const uploadResult = await uploadResponse.json();
+      console.log('Upload successful, result:', uploadResult);
+      
       const uuid = uploadResult[0].uuid;
       const state = uploadResult[0].state;
 
       // Step 2: Check if processing is needed (for image-based PDFs)
       if (state === 'PROCESSING') {
+        console.log('File is processing, waiting for completion...');
         let currentState = state;
-        while (currentState === 'PROCESSING') {
+        let attempts = 0;
+        const maxAttempts = 30; // 5 minutes max wait time
+        
+        while (currentState === 'PROCESSING' && attempts < maxAttempts) {
           await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+          attempts++;
           
+          console.log(`Status check attempt ${attempts}/${maxAttempts}...`);
           const statusResponse = await fetch(`${API_BASE_URL}/BankStatement/status`, {
             method: 'POST',
             headers: {
@@ -99,15 +126,23 @@ class BankStatementParser {
           });
 
           if (!statusResponse.ok) {
-            throw new Error(`Status check failed: ${statusResponse.status}`);
+            const errorText = await statusResponse.text();
+            console.error(`Status check failed with status ${statusResponse.status}:`, errorText);
+            throw new Error(`Status check failed: ${statusResponse.status} - ${errorText}`);
           }
 
           const statusResult = await statusResponse.json();
           currentState = statusResult[0].state;
+          console.log('Current state:', currentState);
+        }
+        
+        if (attempts >= maxAttempts) {
+          throw new Error('Processing timeout - file took too long to process');
         }
       }
 
       // Step 3: Convert the statement to JSON
+      console.log('Converting statement to JSON...');
       const convertResponse = await fetch(`${API_BASE_URL}/BankStatement/convert?format=JSON`, {
         method: 'POST',
         headers: {
@@ -118,18 +153,30 @@ class BankStatementParser {
       });
 
       if (!convertResponse.ok) {
-        throw new Error(`Conversion failed: ${convertResponse.status}`);
+        const errorText = await convertResponse.text();
+        console.error(`Conversion failed with status ${convertResponse.status}:`, errorText);
+        throw new Error(`Conversion failed: ${convertResponse.status} - ${errorText}`);
       }
 
       const convertResult = await convertResponse.json();
+      console.log('Conversion successful, processing response...');
       
       // Process the API response and separate withdrawals from deposits
-      return this.processAPIResponse(convertResult[0], file.name);
+      const result = this.processAPIResponse(convertResult[0], file.name);
+      console.log('API parsing completed successfully');
+      result.apiUsed = true;
+      return result;
       
     } catch (error) {
-      console.error('Error parsing PDF:', error);
-      // Fallback to sample data if API fails
-      return this.generateSampleData(file.name);
+      console.error('Error parsing PDF with API:', error);
+      console.log('Falling back to sample data generation...');
+      
+      // Add a flag to indicate API was not used
+      const sampleData = this.generateSampleData(file.name);
+      sampleData.apiUsed = false;
+      sampleData.apiError = error instanceof Error ? error.message : String(error);
+      
+      return sampleData;
     }
   }
 
@@ -443,6 +490,24 @@ function FileUploadZone({
                 <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                   Ready for comparison
                 </p>
+                {parsedData && (
+                  <div className="mt-2">
+                    {parsedData.apiUsed === false ? (
+                      <div 
+                        className={`flex items-center gap-1 text-xs ${isDark ? 'text-yellow-400' : 'text-yellow-600'} cursor-help`}
+                        title={parsedData.apiError ? `API Error: ${parsedData.apiError}` : 'API unavailable'}
+                      >
+                        <AlertCircle className="h-3 w-3" />
+                        <span>Using sample data (API unavailable)</span>
+                      </div>
+                    ) : parsedData.apiUsed === true ? (
+                      <div className={`flex items-center gap-1 text-xs ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                        <CheckCircle className="h-3 w-3" />
+                        <span>Parsed with API</span>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -2439,6 +2504,7 @@ function App() {
   const [userTier, setUserTier] = useState<string | undefined>(undefined);
 
   const [comparisonGenerated, setComparisonGenerated] = useState(false);
+  const [isGeneratingComparison, setIsGeneratingComparison] = useState(false);
 
   // Check authentication status on component mount
   useEffect(() => {
@@ -2476,6 +2542,7 @@ function App() {
       return;
     }
 
+    setIsGeneratingComparison(true);
     setUploading({ statement1: true, statement2: true });
     
     try {
@@ -2599,6 +2666,7 @@ function App() {
       alert('Error processing PDFs. Please try again.');
     } finally {
       setUploading({ statement1: false, statement2: false });
+      setIsGeneratingComparison(false);
     }
   };
 
@@ -3000,13 +3068,18 @@ function App() {
           <div className="text-center mb-8">
             <button
               onClick={generateComparison}
+              disabled={isGeneratingComparison}
               className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 ${
-                isDarkMode 
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl' 
-                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
+                isGeneratingComparison
+                  ? isDarkMode 
+                    ? 'bg-gray-500 text-gray-300 cursor-not-allowed shadow-lg' 
+                    : 'bg-gray-400 text-gray-600 cursor-not-allowed shadow-lg'
+                  : isDarkMode 
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl' 
+                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
               }`}
             >
-              Generate Comparison
+              {isGeneratingComparison ? 'Generating...' : 'Generate Comparison'}
             </button>
             <p className={`text-sm mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
               This will process all categories and charge based on pages processed

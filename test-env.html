@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Environment Variable Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .env-item { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .set { background-color: #d4edda; border-color: #c3e6cb; }
+        .not-set { background-color: #f8d7da; border-color: #f5c6cb; }
+        .fallback { background-color: #fff3cd; border-color: #ffeaa7; }
+    </style>
+</head>
+<body>
+    <h1>Environment Variable Test</h1>
+    <div id="env-status"></div>
+    
+    <script type="module">
+        // Test environment variables
+        const envVars = {
+            'VITE_PDF_PARSER_API_KEY': import.meta.env.VITE_PDF_PARSER_API_KEY,
+            'VITE_PDF_PARSER_API_URL': import.meta.env.VITE_PDF_PARSER_API_URL
+        };
+        
+        const fallbacks = {
+            'VITE_PDF_PARSER_API_KEY': 'api-AB7psQuumDdjVHLTPYMDghH2xUgaKcuJZVvwReMMsxM9iQBaYJg/BrelRUX07neH',
+            'VITE_PDF_PARSER_API_URL': 'https://api2.bankstatementconverter.com/api/v1'
+        };
+        
+        const statusDiv = document.getElementById('env-status');
+        
+        Object.entries(envVars).forEach(([key, value]) => {
+            const div = document.createElement('div');
+            div.className = 'env-item';
+            
+            if (value) {
+                div.className += ' set';
+                div.innerHTML = `
+                    <strong>${key}:</strong> Set ✅<br>
+                    <small>Value: ${value.substring(0, 10)}...</small>
+                `;
+            } else {
+                div.className += ' not-set';
+                div.innerHTML = `
+                    <strong>${key}:</strong> Not Set ❌<br>
+                    <small>Using fallback: ${fallbacks[key]}</small>
+                `;
+            }
+            
+            statusDiv.appendChild(div);
+        });
+        
+        // Show current API configuration
+        const apiKey = envVars.VITE_PDF_PARSER_API_KEY || fallbacks.VITE_PDF_PARSER_API_KEY;
+        const apiUrl = envVars.VITE_PDF_PARSER_API_URL || fallbacks.VITE_PDF_PARSER_API_URL;
+        
+        const configDiv = document.createElement('div');
+        configDiv.className = 'env-item fallback';
+        configDiv.innerHTML = `
+            <strong>Current API Configuration:</strong><br>
+            <small>URL: ${apiUrl}</small><br>
+            <small>Key: ${apiKey.substring(0, 10)}...</small>
+        `;
+        statusDiv.appendChild(configDiv);
+        
+        console.log('Environment Variable Test:', {
+            envVars,
+            fallbacks,
+            currentConfig: { apiKey, apiUrl }
+        });
+    </script>
+</body>
+</html> 
