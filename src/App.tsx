@@ -4,6 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { loadStripe } from '@stripe/stripe-js';
 import { userService } from './lib/userService';
 import { Profile, TIER_CONFIG } from './lib/supabase';
+import { supabase } from './lib/supabase';
 
 
 // Stripe Configuration
@@ -1419,16 +1420,27 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
   );
 }
 
-function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode }: {
+function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthenticated, onShowPricing, userTier }: {
   isVisible: boolean;
   onBack: () => void;
   isDark: boolean;
   onToggleDarkMode: () => void;
+  isAuthenticated: boolean;
+  onShowPricing: () => void;
+  userTier?: string;
 }) {
   if (!isVisible) return null;
 
   const handleManageSubscription = () => {
     window.open('https://billing.stripe.com/p/login/test_dRmdRbcurfW97JAdhBgUM00', '_blank');
+  };
+
+  const handleUpgrade = () => {
+    // Navigate to pricing page by triggering the pricing modal
+    // We'll need to pass this function from the parent component
+    if (onShowPricing) {
+      onShowPricing();
+    }
   };
 
   return (
@@ -1526,20 +1538,33 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode }: {
                 isDark ? 'text-gray-200' : 'text-gray-800'
               }`}>
                 <CreditCard className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
-                Subscription
+                {isAuthenticated && userTier && userTier !== 'anonymous' && userTier !== 'signup' ? 'Subscription' : 'Upgrade'}
               </h3>
               
               <div className="flex justify-center">
-                <button
-                  onClick={handleManageSubscription}
-                  className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 border ${
-                    isDark 
-                      ? 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600' 
-                      : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  Manage Subscription
-                </button>
+                {isAuthenticated && userTier && userTier !== 'anonymous' && userTier !== 'signup' ? (
+                  <button
+                    onClick={handleManageSubscription}
+                    className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 border ${
+                      isDark 
+                        ? 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600' 
+                        : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    Manage Subscription
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleUpgrade}
+                    className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                      isDark 
+                        ? 'bg-purple-600 text-white hover:bg-purple-700' 
+                        : 'bg-purple-600 text-white hover:bg-purple-700'
+                    }`}
+                  >
+                    Upgrade
+                  </button>
+                )}
               </div>
             </div>
             
@@ -1611,7 +1636,23 @@ function UsagePage({ isVisible, onBack, isDark }: {
         }
         
         const history = await userService.getUsageHistory();
-        setUsageData(history);
+        
+        // Format the usage data for display
+        const formattedHistory = history.map(log => ({
+          id: log.id,
+          date: new Date(log.created_at).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          description: `${log.action === 'comparison' ? 'Bank Statement Comparison' : 'Page Processing'} - ${log.pages_processed} page${log.pages_processed > 1 ? 's' : ''}`,
+          creditsUsed: log.credits_used,
+          type: 'usage'
+        }));
+        
+        setUsageData(formattedHistory);
       } catch (error) {
         console.error('Error loading usage data:', error);
       } finally {
@@ -1676,7 +1717,7 @@ function UsagePage({ isVisible, onBack, isDark }: {
               Usage
             </h1>
             <p className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              {user ? `${user.credits} credits available` : '0 credits available'}
+              {user ? `${user.credits} credits available` : `${creditsRemaining} credits available`}
             </p>
           </div>
           
@@ -1732,42 +1773,55 @@ function UsagePage({ isVisible, onBack, isDark }: {
           
           <div className="mb-6">
             <h2 className={`text-xl font-semibold mb-4 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-              Credit Used in the Last 28 Days
+              Recent Usage History
             </h2>
           </div>
           
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className={`border-b ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
-                  <th className={`text-left py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    Date
-                  </th>
-                  <th className={`text-left py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    Description
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {usageData.map((item, index) => (
-                  <tr key={index} className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-100'}`}>
-                    <td className={`py-3 px-4 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                      {item.date}
-                    </td>
-                    <td className={`py-3 px-4 ${
-                      item.type === 'usage' 
-                        ? isDark ? 'text-red-400' : 'text-red-600'
-                        : item.type === 'acquisition'
-                        ? isDark ? 'text-green-400' : 'text-green-600'
-                        : isDark ? 'text-gray-300' : 'text-gray-600'
-                    }`}>
-                      {item.description}
-                    </td>
+          {loading ? (
+            <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              <Loader2 className="mx-auto h-8 w-8 animate-spin mb-4" />
+              <p>Loading usage history...</p>
+            </div>
+          ) : usageData.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className={`border-b ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                    <th className={`text-left py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Date
+                    </th>
+                    <th className={`text-left py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Description
+                    </th>
+                    <th className={`text-left py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Credits Used
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {usageData.map((item, index) => (
+                    <tr key={index} className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-100'}`}>
+                      <td className={`py-3 px-4 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                        {item.date}
+                      </td>
+                      <td className={`py-3 px-4 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                        {item.description}
+                      </td>
+                      <td className={`py-3 px-4 font-semibold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                        -{item.creditsUsed}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              <BarChart3 className="mx-auto h-12 w-12 mb-4 opacity-50" />
+              <h3 className="text-lg font-medium mb-2">No usage history yet</h3>
+              <p className="text-sm">Start comparing bank statements to see your usage here</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1779,10 +1833,86 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
   onBack: () => void;
   isDark: boolean;
 }) {
-  if (!isVisible) return null;
+  const [pastDocuments, setPastDocuments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Real past documents data - will be fetched from Supabase
-  const pastDocuments: any[] = []; // Empty array for now, will be populated from database
+  useEffect(() => {
+    const loadPastDocuments = async () => {
+      try {
+        setLoading(true);
+        
+        // Get current user or session ID
+        const user = await userService.getCurrentUser();
+        const sessionId = userService.getSessionId();
+        
+        // Fetch comparisons from database
+        let query = supabase
+          .from('comparisons')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (user) {
+          // For authenticated users, look for records with their user_id
+          query = query.eq('user_id', user.id);
+        } else {
+          // For anonymous users, look for records with their session_id
+          query = query.eq('session_id', sessionId);
+        }
+
+        const { data, error } = await query;
+
+        console.log('Past documents query:', { user: user?.id, sessionId, data, error });
+        
+        // Also check if there are any comparisons at all in the database
+        const { data: allData, error: allError } = await supabase
+          .from('comparisons')
+          .select('*')
+          .limit(5);
+        console.log('All comparisons in database:', { allData, allError });
+
+        if (error) {
+          console.error('Error fetching past documents:', error);
+          setPastDocuments([]);
+        } else {
+          // Format the data for display
+          const formattedDocuments = (data || []).map(doc => ({
+            id: doc.id,
+            statement1Name: doc.statement1_name,
+            statement2Name: doc.statement2_name,
+            date: new Date(doc.created_at).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            statement1Withdrawals: doc.statement1_withdrawals || 0,
+            statement1Deposits: doc.statement1_deposits || 0,
+            statement2Withdrawals: doc.statement2_withdrawals || 0,
+            statement2Deposits: doc.statement2_deposits || 0,
+            totalWithdrawals: doc.total_withdrawals || 0,
+            totalDeposits: doc.total_deposits || 0,
+            status: doc.status || 'completed',
+            results: doc.results || {}
+          }));
+          
+          setPastDocuments(formattedDocuments);
+        }
+      } catch (error) {
+        console.error('Error loading past documents:', error);
+        setPastDocuments([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isVisible) {
+      loadPastDocuments();
+    }
+  }, [isVisible]);
+
+  if (!isVisible) return null;
 
   const handleDownloadPDF = (documentId: string) => {
     // In a real app, this would download the actual PDF
@@ -1796,12 +1926,7 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
     alert(`Downloading comparison CSV for document ${documentId}`);
   };
 
-  const handleRedoComparison = (documentId: string) => {
-    // In a real app, this would load the documents for re-comparison
-    console.log(`Redoing comparison for document ${documentId}`);
-    alert(`Loading documents for re-comparison: ${documentId}`);
-    onBack(); // Return to main app
-  };
+
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
@@ -1820,7 +1945,7 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
               <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                
+                BankCompare
               </span>
             </div>
             
@@ -1848,102 +1973,111 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
           </p>
         </div>
         
-        <div className="grid gap-6">
-          {pastDocuments.length > 0 ? (
-            pastDocuments.map((doc) => (
-              <div key={doc.id} className={`rounded-xl border shadow-lg p-6 ${
-                isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-              }`}>
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                      {doc.statement1Name} vs {doc.statement2Name}
-                    </h3>
-                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                      {doc.date} • {doc.categories.length} categories compared
-                    </p>
+        {loading ? (
+          <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            <Loader2 className="mx-auto h-8 w-8 animate-spin mb-4" />
+            <p>Loading past documents...</p>
+          </div>
+        ) : (
+          <div className="grid gap-6">
+            {pastDocuments.length > 0 ? (
+              pastDocuments.map((doc) => (
+                <div key={doc.id} className={`rounded-xl border shadow-lg p-6 ${
+                  isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                }`}>
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                        {doc.statement1Name} vs {doc.statement2Name}
+                      </h3>
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {doc.date}
+                      </p>
+                    </div>
+
                   </div>
-                  <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    doc.status === 'completed' 
-                      ? isDark ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-800'
-                      : isDark ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {doc.status}
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div className={`p-4 rounded-lg ${
+                      isDark ? 'bg-gray-700/50' : 'bg-gray-50'
+                    }`}>
+                      <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {doc.statement1Name}
+                      </p>
+                      <div className="mt-2 space-y-1">
+                        <div className="flex justify-between">
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Withdrawals:</span>
+                          <span className={`font-semibold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                            -${doc.statement1Withdrawals.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Deposits:</span>
+                          <span className={`font-semibold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                            +${doc.statement1Deposits.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className={`p-4 rounded-lg ${
+                      isDark ? 'bg-gray-700/50' : 'bg-gray-50'
+                    }`}>
+                      <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {doc.statement2Name}
+                      </p>
+                      <div className="mt-2 space-y-1">
+                        <div className="flex justify-between">
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Withdrawals:</span>
+                          <span className={`font-semibold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                            -${doc.statement2Withdrawals.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Deposits:</span>
+                          <span className={`font-semibold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                            +${doc.statement2Deposits.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => handleDownloadPDF(doc.id)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${
+                        isDark 
+                          ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105' 
+                          : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
+                      }`}
+                    >
+                      <Download className="h-4 w-4" />
+                      Download PDF
+                    </button>
+                    <button
+                      onClick={() => handleDownloadCSV(doc.id)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 border ${
+                        isDark 
+                          ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
+                          : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Download className="h-4 w-4" />
+                      Download CSV
+                    </button>
+
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className={`p-4 rounded-lg ${
-                    isDark ? 'bg-gray-700/50' : 'bg-gray-50'
-                  }`}>
-                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Categories</p>
-                    <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                      {doc.categories.join(', ')}
-                    </p>
-                  </div>
-                  <div className={`p-4 rounded-lg ${
-                    isDark ? 'bg-gray-700/50' : 'bg-gray-50'
-                  }`}>
-                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Withdrawals</p>
-                    <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                      ${doc.totalWithdrawals.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className={`p-4 rounded-lg ${
-                    isDark ? 'bg-gray-700/50' : 'bg-gray-50'
-                  }`}>
-                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Deposits</p>
-                    <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                      ${doc.totalDeposits.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={() => handleDownloadPDF(doc.id)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${
-                      isDark 
-                        ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105' 
-                        : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
-                    }`}
-                  >
-                    <Download className="h-4 w-4" />
-                    Download PDF
-                  </button>
-                  <button
-                    onClick={() => handleDownloadCSV(doc.id)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 border ${
-                      isDark 
-                        ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
-                        : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <Download className="h-4 w-4" />
-                    Download CSV
-                  </button>
-                  <button
-                    onClick={() => handleRedoComparison(doc.id)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 border ${
-                      isDark 
-                        ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
-                        : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <BarChart3 className="h-4 w-4" />
-                    Redo Comparison
-                  </button>
-                </div>
+              ))
+            ) : (
+              <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                <BarChart3 className={`mx-auto h-12 w-12 mb-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                <h3 className="text-lg font-medium mb-2">No comparisons yet</h3>
+                <p className="text-sm">Create your first bank statement comparison to see it here</p>
               </div>
-            ))
-          ) : (
-            <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              <BarChart3 className={`mx-auto h-12 w-12 mb-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
-              <h3 className="text-lg font-medium mb-2">No comparisons yet</h3>
-              <p className="text-sm">Create your first bank statement comparison to see it here</p>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2301,9 +2435,24 @@ function App() {
   const [showPastDocumentsPage, setShowPastDocumentsPage] = useState(false);
   const [showAuthPage, setShowAuthPage] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false); // Simulate signed in state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userTier, setUserTier] = useState<string | undefined>(undefined);
 
   const [comparisonGenerated, setComparisonGenerated] = useState(false);
 
+  // Check authentication status on component mount
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      const user = await userService.getCurrentUser();
+      setIsAuthenticated(!!user);
+      if (user) {
+        setUserTier(user.tier);
+      } else {
+        setUserTier(undefined);
+      }
+    };
+    checkAuthStatus();
+  }, []);
 
   const parser = new BankStatementParser();
 
@@ -2400,6 +2549,48 @@ function App() {
       
       // Log the usage based on pages processed
       await userService.logUsage('comparison', totalPages);
+      
+      // Save comparison to database
+      try {
+        const user = await userService.getCurrentUser();
+        const sessionId = userService.getSessionId();
+        
+        // Calculate totals for the comparison
+        const totalWithdrawals = result1.totalWithdrawals + result2.totalWithdrawals;
+        const totalDeposits = result1.totalDeposits + result2.totalDeposits;
+        
+        // Save to comparisons table
+        const saveData = {
+          user_id: user?.id || null,
+          session_id: user ? null : sessionId,
+          statement1_name: editableStatementNames.statement1,
+          statement2_name: editableStatementNames.statement2,
+          categories: Object.keys(comparison),
+          results: comparison,
+          total_withdrawals: totalWithdrawals,
+          total_deposits: totalDeposits,
+          statement1_withdrawals: result1.totalWithdrawals,
+          statement1_deposits: result1.totalDeposits,
+          statement2_withdrawals: result2.totalWithdrawals,
+          statement2_deposits: result2.totalDeposits,
+          status: 'completed'
+        };
+        
+        console.log('Saving comparison data:', saveData);
+        
+        const { data: savedData, error: saveError } = await supabase
+          .from('comparisons')
+          .insert(saveData)
+          .select();
+          
+        if (saveError) {
+          console.error('Error saving comparison:', saveError);
+        } else {
+          console.log('Successfully saved comparison:', savedData);
+        }
+      } catch (error) {
+        console.error('Error saving comparison to database:', error);
+      }
       
       alert(`Comparison completed! Processed ${totalPages} pages.`);
       
@@ -3286,6 +3477,9 @@ function App() {
           onBack={() => setShowSettingsPage(false)}
           isDark={isDarkMode}
           onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+          isAuthenticated={isAuthenticated}
+          onShowPricing={() => setShowPricingModal(true)}
+          userTier={userTier}
         />
       ) : showUsagePage ? (
         <UsagePage
