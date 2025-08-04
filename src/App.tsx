@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { loadStripe } from '@stripe/stripe-js';
 import { userService } from './lib/userService';
 import { Profile, TIER_CONFIG } from './lib/supabase';
-import { TierTester } from './components/TierTester';
+
 
 // Stripe Configuration
 const stripePromise = loadStripe('pk_test_51RrpatRD0ogceRR4A7KSSLRWPStkofC0wJ7dcOIuP1zJjL4wLccu9bu1bxSP1XnVunRP36quFSNi86ylTH8r9vU600dIEPIsdM');
@@ -46,7 +46,7 @@ const categories = [
   { id: 'shopping', name: 'Shopping', icon: ShoppingBag, color: '#96CEB4', keywords: ['amazon', 'ebay', 'shop', 'store', 'retail', 'purchase', 'misc', 'other', 'unknown', 'unclassified'] },
   { id: 'subscriptions', name: 'Subscriptions', icon: Gamepad2, color: '#FCEA2B', keywords: ['netflix', 'spotify', 'subscription', 'monthly', 'hulu', 'disney', 'prime', 'recurring', 'verizon'] },
   { id: 'utilities', name: 'Utilities', icon: Zap, color: '#FF9FF3', keywords: ['electric', 'water', 'gas bill', 'utility', 'phone', 'internet', 'cable', 'atm', 'fee', 'charge', 'overdraft', 'penalty', 'applecard'] },
-  { id: 'health', name: 'Health & Fitness', icon: Activity, color: '#54A0FF', keywords: ['gym', 'health', 'medical', 'pharmacy', 'fitness', 'doctor', 'fitness', 'Fitness'] },
+  { id: 'health', name: 'Health & Fitness', icon: Activity, color: '#54A0FF', keywords: ['gym', 'health', 'medical', 'pharmacy', 'fitness', 'doctor', 'planet fitness', 'fitness center', 'workout'] },
   { id: 'income', name: 'Income', icon: DollarSign, color: '#00D4AA', keywords: ['salary', 'deposit', 'payment', 'income', 'payroll', 'direct deposit'] }
 ];
 
@@ -252,6 +252,51 @@ class BankStatementParser {
       accountHolder: fileName.replace('.pdf', '')
     };
   }
+
+  async getPDFPageCount(file: File): Promise<number> {
+    try {
+      // Create a FileReader to read the PDF file
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+          try {
+            const arrayBuffer = e.target?.result as ArrayBuffer;
+            const uint8Array = new Uint8Array(arrayBuffer);
+            
+            // Look for the PDF page count in the trailer
+            const pdfString = new TextDecoder().decode(uint8Array);
+            
+            // Find the /Count pattern in the trailer
+            const countMatch = pdfString.match(/\/Count\s+(\d+)/);
+            if (countMatch) {
+              const pageCount = parseInt(countMatch[1]);
+              resolve(pageCount);
+            } else {
+              // Fallback: estimate based on file size (rough approximation)
+              const estimatedPages = Math.max(1, Math.floor(file.size / 50000)); // ~50KB per page
+              resolve(estimatedPages);
+            }
+          } catch (error) {
+            // Fallback: estimate based on file size
+            const estimatedPages = Math.max(1, Math.floor(file.size / 50000));
+            resolve(estimatedPages);
+          }
+        };
+        
+        reader.onerror = function() {
+          // Fallback: estimate based on file size
+          const estimatedPages = Math.max(1, Math.floor(file.size / 50000));
+          resolve(estimatedPages);
+        };
+        
+        reader.readAsArrayBuffer(file);
+      });
+    } catch (error) {
+      // Final fallback: estimate based on file size
+      return Math.max(1, Math.floor(file.size / 50000));
+    }
+  }
 }
 
 function DarkModeToggle({ isDark, onToggle }: { isDark: boolean; onToggle: () => void }) {
@@ -283,9 +328,9 @@ function FileUploadZone({
   uploadedFile, 
   parsedData,
   isDark,
-  onEditTransactions,
   statementName,
-  onStatementNameChange
+  onStatementNameChange,
+  comparisonGenerated
 }: {
   onFileUpload: (file: File) => void;
   label: string;
@@ -293,9 +338,9 @@ function FileUploadZone({
   uploadedFile: File | null;
   parsedData: ParsedStatement | null;
   isDark: boolean;
-  onEditTransactions?: () => void;
   statementName: string;
   onStatementNameChange?: (name: string) => void;
+  comparisonGenerated?: boolean;
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -365,7 +410,7 @@ function FileUploadZone({
               ? 'border-gray-600 hover:border-gray-500 bg-gray-800/50'
               : 'border-gray-300 hover:border-gray-400 bg-white'
           }
-          ${parsedData 
+          ${uploadedFile 
             ? isDark 
               ? 'border-green-400 bg-green-900/20' 
               : 'border-green-500 bg-green-50'
@@ -385,23 +430,17 @@ function FileUploadZone({
           {isUploading ? (
             <>
               <Loader2 className={`mx-auto h-12 w-12 animate-spin ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
-              <p className={`font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Processing PDF...</p>
+              <p className={`font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Uploading PDF...</p>
             </>
-          ) : parsedData ? (
+          ) : uploadedFile ? (
             <>
               <CheckCircle className={`mx-auto h-12 w-12 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
               <div>
                 <p className={`font-medium ${isDark ? 'text-green-300' : 'text-green-700'}`}>
-                  {uploadedFile?.name}
+                  {uploadedFile.name}
                 </p>
                 <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {parsedData.transactions.length} transactions found
-                </p>
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Withdrawals: ${parsedData.totalWithdrawals.toFixed(2)}
-                </p>
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Deposits: ${parsedData.totalDeposits.toFixed(2)}
+                  Ready for comparison
                 </p>
               </div>
             </>
@@ -421,22 +460,7 @@ function FileUploadZone({
         </div>
       </div>
       
-      {/* Edit Transactions Button - Outside Upload Box */}
-      {onEditTransactions && parsedData && (
-        <div className="mt-4 text-center">
-          <button
-            onClick={onEditTransactions}
-            className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
-              isDark 
-                ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105' 
-                : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
-            }`}
-          >
-            <FileText className="h-4 w-4" />
-            Edit Transactions
-          </button>
-        </div>
-      )}
+      {/* Edit Transactions buttons moved to underneath overall summary */}
     </div>
   );
 }
@@ -654,10 +678,11 @@ function ComparisonResults({
   onUnlock?: () => void;
   isDark: boolean;
 }) {
-  const chartData = Object.entries(data).map(([categoryId, result]) => {
+  const chartData = Object.entries(data).map(([categoryId, result], index) => {
     const category = categories.find(c => c.id === categoryId);
     return {
       category: category?.name || categoryId,
+      categoryNumber: index + 1,
       [statement1Name]: result.statement1,
       [statement2Name]: result.statement2,
       color: category?.color || '#8884d8'
@@ -688,7 +713,7 @@ function ComparisonResults({
                 <BarChart data={chartData} className={isDark ? 'text-gray-300' : 'text-gray-700'}>
                   <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e5e7eb'} />
                   <XAxis 
-                    dataKey="category" 
+                    dataKey="categoryNumber" 
                     tick={{ fill: isDark ? '#d1d5db' : '#374151' }}
                     axisLine={{ stroke: isDark ? '#6b7280' : '#9ca3af' }}
                   />
@@ -704,6 +729,10 @@ function ComparisonResults({
                       return [`$${value.toFixed(2)}`, statement2Name];
                     }
                     return [`$${value.toFixed(2)}`, name];
+                  }}
+                  labelFormatter={(label: any) => {
+                    const dataPoint = chartData.find(item => item.categoryNumber === label);
+                    return dataPoint ? dataPoint.category : label;
                   }}
                 />
                   <Bar dataKey={statement1Name} fill="#3B82F6" />
@@ -731,7 +760,7 @@ function ComparisonResults({
         )}
 
         <div className="space-y-3">
-          {Object.entries(previewData).map(([categoryId, result]) => {
+          {Object.entries(previewData).map(([categoryId, result], index) => {
             const category = categories.find(c => c.id === categoryId);
             const Icon = category?.icon || BarChart3;
             
@@ -749,14 +778,25 @@ function ComparisonResults({
                       style={{ color: category?.color }}
                     />
                   </div>
-                  <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                    {category?.name}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      #{index + 1}
+                    </span>
+                    <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                      {category?.name}
+                    </span>
+                  </div>
                 </div>
                 
                 <div className="text-right">
                   <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    ${result.statement1.toFixed(2)} vs ${result.statement2.toFixed(2)}
+                    <span className={`font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                      ${result.statement1.toFixed(2)}
+                    </span>
+                    {' vs '}
+                    <span className={`font-medium ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                      ${result.statement2.toFixed(2)}
+                    </span>
                   </div>
                   <div className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                     ${result.difference.toFixed(2)} difference
@@ -1200,6 +1240,12 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
 }) {
   if (!isVisible) return null;
 
+  const STRIPE_CHECKOUT_URLS = {
+    starter: 'https://buy.stripe.com/test_dRmdRbcurfW97JAdhBgUM00',
+    pro: 'https://buy.stripe.com/test_28EaEZ7a7fW9aVM0uPgUM01',
+    business: 'https://buy.stripe.com/test_eVq8wR66325j3tk4L5gUM02'
+  };
+
   const handleCheckout = async (planName: string) => {
     if (planName === 'Anonymous') {
       // For anonymous plan, just redirect to main app
@@ -1214,35 +1260,20 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
       return;
     }
 
-    // Find the plan and use its specific price ID
-    const plan = plans.find(p => p.name === planName);
+    // For paid plans, redirect directly to Stripe checkout
+    if (planName === 'Starter') {
+      window.location.href = STRIPE_CHECKOUT_URLS.starter;
+      return;
+    }
     
-    if (plan && plan.priceId) {
-      try {
-        const stripe = await stripePromise;
-        if (!stripe) {
-          console.error('Stripe failed to load');
-          return;
-        }
-
-        const { error } = await stripe.redirectToCheckout({
-          lineItems: [{ price: plan.priceId, quantity: 1 }],
-          mode: 'subscription',
-          successUrl: `${window.location.origin}/success`,
-          cancelUrl: `${window.location.origin}/pricing`,
-        });
-
-        if (error) {
-          console.error('Checkout error:', error);
-          alert('Checkout failed. Please try again.');
-        }
-      } catch (error) {
-        console.error('Checkout failed:', error);
-        alert('Checkout failed. Please try again.');
-      }
-    } else {
-      console.error('Price ID not found for plan:', planName);
-      alert('Plan not configured. Please contact support.');
+    if (planName === 'Pro') {
+      window.location.href = STRIPE_CHECKOUT_URLS.pro;
+      return;
+    }
+    
+    if (planName === 'Business') {
+      window.location.href = STRIPE_CHECKOUT_URLS.business;
+      return;
     }
   };
 
@@ -1394,37 +1425,11 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode }: {
   isDark: boolean;
   onToggleDarkMode: () => void;
 }) {
-  const [user, setUser] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await userService.getCurrentUser();
-        setUser(currentUser);
-      } catch (error) {
-        console.error('Error loading user:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (isVisible) {
-      loadUser();
-    }
-  }, [isVisible]);
-
   if (!isVisible) return null;
 
   const handleManageSubscription = () => {
     window.open('https://billing.stripe.com/p/login/test_dRmdRbcurfW97JAdhBgUM00', '_blank');
   };
-
-  // Calculate credits based on user tier
-  const tierConfig = user ? TIER_CONFIG[user.tier] : TIER_CONFIG.anonymous;
-  const creditsRemaining = user ? user.credits : tierConfig.credits;
-  const creditsUsed = user ? tierConfig.credits - user.credits : 0;
-  const totalCredits = tierConfig.credits;
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
@@ -1472,56 +1477,6 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode }: {
           </div>
           
           <div className="space-y-8">
-            {/* Credits Section */}
-            <div className={`p-6 rounded-lg border ${
-              isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
-            }`}>
-              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
-                isDark ? 'text-gray-200' : 'text-gray-800'
-              }`}>
-                <DollarSign className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
-                Credits & Usage
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <div className="text-center">
-                  <div className={`text-2xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                    {creditsRemaining}
-                  </div>
-                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Credits Remaining
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className={`text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                    {creditsUsed}
-                  </div>
-                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Credits Used
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className={`text-2xl font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    {totalCredits}
-                  </div>
-                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Total Credits
-                  </div>
-                </div>
-              </div>
-              
-              {/* Progress Bar */}
-              <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                <div 
-                  className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${totalCredits > 0 ? (creditsRemaining / totalCredits) * 100 : 0}%` }}
-                ></div>
-              </div>
-              <div className={`text-xs text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                {totalCredits > 0 ? `${Math.round((creditsRemaining / totalCredits) * 100)}% remaining` : 'Subscribe for More Credits'}
-              </div>
-            </div>
-
             {/* Dark Mode Toggle */}
             <div className={`p-6 rounded-lg border ${
               isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
@@ -1579,7 +1534,7 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode }: {
                   onClick={handleManageSubscription}
                   className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 border ${
                     isDark 
-                      ? 'bg-white text-gray-800 border-gray-300 hover:bg-gray-100' 
+                      ? 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600' 
                       : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
                   }`}
                 >
@@ -1640,12 +1595,20 @@ function UsagePage({ isVisible, onBack, isDark }: {
   const [usageData, setUsageData] = useState<any[]>([]);
   const [user, setUser] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [anonymousUsage, setAnonymousUsage] = useState<number>(0);
 
   useEffect(() => {
     const loadData = async () => {
       try {
         const currentUser = await userService.getCurrentUser();
         setUser(currentUser);
+        
+        // If no authenticated user, check anonymous usage
+        if (!currentUser) {
+          const usageHistory = await userService.getUsageHistory();
+          const totalUsed = usageHistory.reduce((sum, log) => sum + log.credits_used, 0);
+          setAnonymousUsage(totalUsed);
+        }
         
         const history = await userService.getUsageHistory();
         setUsageData(history);
@@ -1662,6 +1625,12 @@ function UsagePage({ isVisible, onBack, isDark }: {
   }, [isVisible]);
 
   if (!isVisible) return null;
+
+  // Calculate credits based on user tier
+  const tierConfig = user ? TIER_CONFIG[user.tier] : TIER_CONFIG.anonymous;
+  const creditsRemaining = user ? user.credits : (tierConfig.credits - anonymousUsage);
+  const creditsUsed = user ? (tierConfig.credits - user.credits) : anonymousUsage;
+  const totalCredits = tierConfig.credits;
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
@@ -1709,6 +1678,56 @@ function UsagePage({ isVisible, onBack, isDark }: {
             <p className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
               {user ? `${user.credits} credits available` : '0 credits available'}
             </p>
+          </div>
+          
+          {/* Credits Section */}
+          <div className={`p-6 rounded-lg border mb-8 ${
+            isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
+          }`}>
+            <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+              isDark ? 'text-gray-200' : 'text-gray-800'
+            }`}>
+              <DollarSign className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+              Credits & Usage
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="text-center">
+                <div className={`text-2xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                  {creditsRemaining}
+                </div>
+                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Credits Remaining
+                </div>
+              </div>
+              <div className="text-center">
+                <div className={`text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                  {creditsUsed}
+                </div>
+                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Credits Used
+                </div>
+              </div>
+              <div className="text-center">
+                <div className={`text-2xl font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {totalCredits}
+                </div>
+                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Total Credits
+                </div>
+              </div>
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+              <div 
+                className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${totalCredits > 0 ? (creditsRemaining / totalCredits) * 100 : 0}%` }}
+              ></div>
+            </div>
+            <div className={`text-xs text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              {totalCredits > 0 ? `${Math.round((creditsRemaining / totalCredits) * 100)}% remaining` : 'Subscribe for More Credits'}
+            </div>
           </div>
           
           <div className="mb-6">
@@ -2245,16 +2264,7 @@ function TransactionEditForm({
 }
 
 // Anonymous usage tracking
-const ANONYMOUS_KEY = 'anonymous_comparison_used';
 
-const getAnonymousUsage = () => {
-  const stored = localStorage.getItem(ANONYMOUS_KEY);
-  return stored === 'true';
-};
-
-const setAnonymousUsage = () => {
-  localStorage.setItem(ANONYMOUS_KEY, 'true');
-};
 
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -2291,30 +2301,24 @@ function App() {
   const [showPastDocumentsPage, setShowPastDocumentsPage] = useState(false);
   const [showAuthPage, setShowAuthPage] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false); // Simulate signed in state
-  const [showTierTester, setShowTierTester] = useState(false);
+
   const [comparisonGenerated, setComparisonGenerated] = useState(false);
+
 
   const parser = new BankStatementParser();
 
   const handleFileUpload = async (statementKey: 'statement1' | 'statement2', file: File) => {
-    // Check anonymous usage if user is not signed in
-    if (!isSignedIn) {
-      const hasUsedAnonymous = getAnonymousUsage();
-      if (hasUsedAnonymous) {
-        alert('You have already used your free anonymous comparison. Please sign up for more comparisons!');
-        return;
-      }
-    }
-    
     setFiles(prev => ({ ...prev, [statementKey]: file }));
     setUploading(prev => ({ ...prev, [statementKey]: true }));
     setComparisonGenerated(false);
     setComparisonResults(null);
     
-    // Just show upload successful, don't process API yet
+    // Show upload successful with a brief loading animation
     setTimeout(() => {
       setUploading(prev => ({ ...prev, [statementKey]: false }));
-    }, 1000);
+      // Show a brief success message
+      alert(`${file.name} uploaded successfully! Ready for comparison.`);
+    }, 1500);
   };
 
   const generateComparison = async () => {
@@ -2335,7 +2339,10 @@ function App() {
       setParsedData({ statement1: result1, statement2: result2 });
       
       // Calculate total pages processed from both statements
-      const totalPages = (result1.transactions.length + result2.transactions.length);
+      // Get actual page count from PDF files
+      const pages1 = await parser.getPDFPageCount(files.statement1);
+      const pages2 = await parser.getPDFPageCount(files.statement2);
+      const totalPages = pages1 + pages2;
       
       // Check tier limits before allowing comparison
       const tierCheck = await userService.canPerformAction('comparison', totalPages);
@@ -2346,9 +2353,7 @@ function App() {
       }
 
       // Mark anonymous usage if user is not signed in
-      if (!isSignedIn) {
-        setAnonymousUsage();
-      }
+
 
       // Generate comparison for ALL categories (not just selected ones)
       const comparison: { [key: string]: ComparisonResult } = {};
@@ -2395,6 +2400,8 @@ function App() {
       
       // Log the usage based on pages processed
       await userService.logUsage('comparison', totalPages);
+      
+      alert(`Comparison completed! Processed ${totalPages} pages.`);
       
     } catch (error) {
       console.error('Error processing PDFs:', error);
@@ -2608,8 +2615,19 @@ function App() {
     setShowTransactionEditor(prev => ({ ...prev, [statementKey]: false }));
   };
 
-  const canGenerate = parsedData.statement1 && parsedData.statement2 && selectedCategories.length > 0;
-  const bothFilesUploaded = parsedData.statement1 && parsedData.statement2;
+  const resetComparison = () => {
+    setFiles({ statement1: null, statement2: null });
+    setParsedData({ statement1: null, statement2: null });
+    setUploading({ statement1: false, statement2: false });
+    setSelectedCategories([]);
+    setComparisonResults(null);
+    setComparisonGenerated(false);
+    setShowTransactionEditor({ statement1: false, statement2: false });
+    setEditableStatementNames({ statement1: 'Statement 1', statement2: 'Statement 2' });
+  };
+
+  const canGenerate = parsedData.statement1 && parsedData.statement2 && selectedCategories.length > 0 && !comparisonGenerated;
+  const bothFilesUploaded = files.statement1 && files.statement2;
 
   return (
     <>
@@ -2642,25 +2660,23 @@ function App() {
                 <nav className="flex items-center gap-6">
                   {!isSignedIn ? (
                     <>
-                      {/* Anonymous usage indicator */}
-                      {getAnonymousUsage() ? (
-                        <div className={`text-xs px-2 py-1 rounded-full ${
-                          isDarkMode 
-                            ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-600' 
-                            : 'bg-yellow-100 text-yellow-800 border border-yellow-300'
-                        }`}>
-                          Free trial used
-                        </div>
-                      ) : (
-                        <div className={`text-xs px-2 py-1 rounded-full ${
-                          isDarkMode 
-                            ? 'bg-green-900/30 text-green-400 border border-green-600' 
-                            : 'bg-green-100 text-green-800 border border-green-300'
-                        }`}>
-                          1 free comparison
-                        </div>
-                      )}
+                      {/* Anonymous usage indicator - will be updated dynamically */}
+                      <div className={`text-xs px-2 py-1 rounded-full ${
+                        isDarkMode 
+                          ? 'bg-green-900/30 text-green-400 border border-green-600' 
+                          : 'bg-green-100 text-green-800 border border-green-300'
+                      }`}>
+                        Anonymous Tier
+                      </div>
                       
+                      <button 
+                        onClick={() => setShowUsagePage(true)}
+                        className={`text-sm font-medium transition-colors hover:scale-105 ${
+                          isDarkMode ? 'text-gray-300 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
+                        }`}
+                      >
+                        Usage
+                      </button>
                       <button 
                         onClick={() => setShowPricingModal(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
@@ -2677,14 +2693,7 @@ function App() {
                       >
                         Settings
                       </button>
-                      <button 
-                        onClick={() => setShowTierTester(true)}
-                        className={`text-sm font-medium transition-colors hover:scale-105 ${
-                          isDarkMode ? 'text-gray-300 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
-                        }`}
-                      >
-                        Tier Test
-                      </button>
+
                       <button 
                         onClick={() => setShowAuthPage(true)}
                         className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
@@ -2778,9 +2787,9 @@ function App() {
             uploadedFile={files.statement1}
             parsedData={parsedData.statement1}
             isDark={isDarkMode}
-            onEditTransactions={() => setShowTransactionEditor(prev => ({ ...prev, statement1: true }))}
             statementName={editableStatementNames.statement1}
             onStatementNameChange={(name) => setEditableStatementNames(prev => ({ ...prev, statement1: name }))}
+            comparisonGenerated={comparisonGenerated}
           />
           <FileUploadZone
             onFileUpload={(file) => handleFileUpload('statement2', file)}
@@ -2789,9 +2798,9 @@ function App() {
             uploadedFile={files.statement2}
             parsedData={parsedData.statement2}
             isDark={isDarkMode}
-            onEditTransactions={() => setShowTransactionEditor(prev => ({ ...prev, statement2: true }))}
             statementName={editableStatementNames.statement2}
             onStatementNameChange={(name) => setEditableStatementNames(prev => ({ ...prev, statement2: name }))}
+            comparisonGenerated={comparisonGenerated}
           />
         </div>
 
@@ -2839,18 +2848,16 @@ function App() {
           </div>
         )}
 
-        {/* Category Selection */}
+        {/* Overall Summary */}
         {bothFilesUploaded && comparisonGenerated && (
           <div className={`rounded-xl p-6 shadow-lg border mb-8 ${
             isDarkMode 
               ? 'bg-gray-800 border-gray-700' 
               : 'bg-white border-gray-100'
           }`}>
-            {/* Overall Summary */}
-            <div className="mb-6">
-              <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                Overall Summary
-              </h3>
+            <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+              Overall Summary
+            </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Statement 1 Summary */}
                 <div className={`p-4 rounded-lg border ${
@@ -2860,6 +2867,12 @@ function App() {
                     {editableStatementNames.statement1}
                   </h4>
                   <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Transactions Found:</span>
+                      <span className={`font-medium ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                        {parsedData.statement1?.transactions.length || 0}
+                      </span>
+                    </div>
                     <div className="flex justify-between">
                       <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Withdrawals:</span>
                       <span className={`font-medium ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
@@ -2895,6 +2908,12 @@ function App() {
                   </h4>
                   <div className="space-y-2">
                     <div className="flex justify-between">
+                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Transactions Found:</span>
+                      <span className={`font-medium ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                        {parsedData.statement2?.transactions.length || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Withdrawals:</span>
                       <span className={`font-medium ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
                         -${parsedData.statement2?.totalWithdrawals.toFixed(2) || '0.00'}
@@ -2920,8 +2939,47 @@ function App() {
                   </div>
                 </div>
               </div>
+
+            {/* Edit Transactions Buttons - Underneath Overall Summary */}
+            <div className="mt-6 mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="text-center">
+                <button
+                  onClick={() => setShowTransactionEditor(prev => ({ ...prev, statement1: true }))}
+                  className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105' 
+                      : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
+                  }`}
+                >
+                  <FileText className="h-4 w-4" />
+                  Edit {editableStatementNames.statement1}
+                </button>
+              </div>
+              <div className="text-center">
+                <button
+                  onClick={() => setShowTransactionEditor(prev => ({ ...prev, statement2: true }))}
+                  className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105' 
+                      : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
+                  }`}
+                >
+                  <FileText className="h-4 w-4" />
+                  Edit {editableStatementNames.statement2}
+                </button>
+              </div>
             </div>
 
+          </div>
+        )}
+
+        {/* Category Selection */}
+        {bothFilesUploaded && comparisonGenerated && (
+          <div className={`rounded-xl p-6 shadow-lg border mb-8 ${
+            isDarkMode 
+              ? 'bg-gray-800 border-gray-700' 
+              : 'bg-white border-gray-100'
+          }`}>
             <CategorySelector
               selectedCategories={selectedCategories}
               onCategoryChange={setSelectedCategories}
@@ -2930,27 +2988,6 @@ function App() {
               isDark={isDarkMode}
               editableStatementNames={editableStatementNames}
             />
-            
-            <div className="mt-6 text-center">
-              <button
-                onClick={generateComparison}
-                disabled={!canGenerate}
-                className={`
-                  inline-flex items-center gap-2 px-8 py-3 rounded-lg font-medium transition-all duration-200
-                  ${canGenerate 
-                    ? isDarkMode
-                      ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
-                      : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
-                    : isDarkMode
-                      ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }
-                `}
-              >
-                <BarChart3 className="h-5 w-5" />
-                Generate Comparison
-              </button>
-            </div>
           </div>
         )}
 
@@ -2978,7 +3015,7 @@ function App() {
                 Export Options
               </h3>
               
-                              <div className="flex flex-wrap gap-4 justify-center">
+                                              <div className="flex flex-wrap gap-4 justify-center">
                   <button
                     onClick={exportToPDF}
                     className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
@@ -3003,7 +3040,25 @@ function App() {
                     Export CSV Data
                   </button>
                 </div>
+              </div>
             </div>
+            
+        )}
+        
+        {/* Compare More Documents Button - Outside Results Section */}
+        {comparisonResults && comparisonGenerated && (
+          <div className="mt-6 text-center">
+            <button
+              onClick={resetComparison}
+              className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium ${
+                isDarkMode 
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105' 
+                  : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
+              }`}
+            >
+              <Upload className="h-5 w-5" />
+              Compare More Documents
+            </button>
           </div>
         )}
 
@@ -3253,11 +3308,8 @@ function App() {
         />
       )}
       
-      <TierTester
-        isVisible={showTierTester}
-        onClose={() => setShowTierTester(false)}
-        isDark={isDarkMode}
-      />
+
+      
     </>
   );
 }

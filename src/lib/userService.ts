@@ -17,12 +17,37 @@ export class UserService {
     return 'session_' + Math.random().toString(36).substr(2, 9)
   }
 
-  // Get or create session ID for anonymous users
+  // Sanitize session ID before storing
+  private sanitizeSessionId(sessionId: string): string {
+    return sessionId.replace(/[^a-zA-Z0-9_-]/g, '')
+  }
+
+  // Validate session ID format
+  private isValidSessionId(sessionId: string): boolean {
+    return /^session_[a-zA-Z0-9]{9}$/.test(sessionId)
+  }
+
+  // Get or create session ID for anonymous users (persistent across refreshes)
   getSessionId(): string {
     if (!this.sessionId) {
-      this.sessionId = this.generateSessionId()
+      // Try to get existing session from localStorage
+      const storedSessionId = localStorage.getItem('anonymous_session_id')
+      
+      if (storedSessionId && this.isValidSessionId(storedSessionId)) {
+        this.sessionId = storedSessionId
+      } else {
+        // Generate new session ID and store it
+        this.sessionId = this.sanitizeSessionId(this.generateSessionId())
+        localStorage.setItem('anonymous_session_id', this.sessionId)
+      }
     }
     return this.sessionId
+  }
+
+  // Clear anonymous session (for testing or when user signs up)
+  clearAnonymousSession(): void {
+    localStorage.removeItem('anonymous_session_id')
+    this.sessionId = null
   }
 
   // Sign in with email/password
@@ -62,6 +87,8 @@ export class UserService {
       if (error) throw error
 
       if (data.user) {
+        // Clear anonymous session when user signs up
+        this.clearAnonymousSession()
         // Create user profile
         await this.createUserProfile(data.user.id, fullName)
         await this.loadUserProfile(data.user.id)
@@ -145,15 +172,18 @@ export class UserService {
         creditsLimit: tierConfig.credits
       }
     } else {
-      // Anonymous user
+      // Anonymous user - check actual usage from logs
       const tierConfig = TIER_CONFIG.anonymous
-      const canPerform = pagesRequired <= tierConfig.credits
+      const usageHistory = await this.getUsageHistory()
+      const totalUsed = usageHistory.reduce((sum, log) => sum + log.credits_used, 0)
+      const remainingCredits = tierConfig.credits - totalUsed
+      const canPerform = pagesRequired <= remainingCredits
 
       return {
         canPerform,
-        reason: canPerform ? undefined : `Anonymous users are limited to ${tierConfig.credits} credit per month`,
+        reason: canPerform ? undefined : `Anonymous users are limited to ${tierConfig.credits} credits per month`,
         tier: 'anonymous',
-        creditsUsed: 0,
+        creditsUsed: totalUsed,
         creditsLimit: tierConfig.credits
       }
     }
@@ -198,6 +228,8 @@ export class UserService {
         }
       }
     }
+    // For anonymous users, the usage is tracked in the usage_logs table
+    // and will be calculated when needed via getUsageHistory()
   }
 
   // Get usage history
@@ -225,6 +257,28 @@ export class UserService {
     await supabase.auth.signOut()
     this.currentUser = null
     this.sessionId = null
+    // Clear anonymous session when user signs out
+    this.clearAnonymousSession()
+  }
+
+  // Update user tier and credits after successful payment
+  async updateUserTierAndCredits(tier: Profile['tier'], credits: number): Promise<void> {
+    const user = await this.getCurrentUser()
+    if (!user) return
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        tier,
+        credits: credits
+      })
+      .eq('id', user.id)
+
+    if (error) {
+      console.error('Error updating user tier and credits:', error)
+    } else {
+      this.currentUser = { ...user, tier, credits }
+    }
   }
 
   // Update user tier (for testing)
