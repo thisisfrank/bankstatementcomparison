@@ -1,7 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { loadStripe } from '@stripe/stripe-js';
+import { userService } from './lib/userService';
+import { Profile, TIER_CONFIG } from './lib/supabase';
+import { TierTester } from './components/TierTester';
 
 // Stripe Configuration
 const stripePromise = loadStripe('pk_test_51RrpatRD0ogceRR4A7KSSLRWPStkofC0wJ7dcOIuP1zJjL4wLccu9bu1bxSP1XnVunRP36quFSNi86ylTH8r9vU600dIEPIsdM');
@@ -818,7 +821,7 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
     setError('');
 
     try {
-      // Simulate Google authentication
+      // For now, simulate Google auth - will implement later
       await new Promise(resolve => setTimeout(resolve, 1500));
       onSignIn();
       onBack();
@@ -835,9 +838,6 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
     setError('');
 
     try {
-      // Simulate email authentication
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
       if (isSignUp && !fullName.trim()) {
         setError('Full name is required');
         return;
@@ -848,10 +848,21 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
         return;
       }
 
-      onSignIn();
-      onBack();
-    } catch (error) {
-      setError('Authentication failed. Please try again.');
+      let result;
+      if (isSignUp) {
+        result = await userService.signUp(email, password, fullName);
+      } else {
+        result = await userService.signIn(email, password);
+      }
+
+      if (result.success) {
+        onSignIn();
+        onBack();
+      } else {
+        setError(result.error || 'Authentication failed');
+      }
+    } catch (error: any) {
+      setError(error.message || 'Authentication failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -1239,7 +1250,7 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
     {
       name: 'Anonymous',
       price: 'Free',
-      pages: '1 complete comparison',
+      pages: '20 pages per month',
       description: 'No signup required',
       priceId: null,
       isAnonymous: true
@@ -1247,7 +1258,7 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
     {
       name: 'Sign Up',
       price: 'Free',
-      pages: '30 pages per month',
+      pages: '40 pages per month',
       description: 'Sign up for free',
       priceId: null
     },
@@ -1383,16 +1394,37 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode }: {
   isDark: boolean;
   onToggleDarkMode: () => void;
 }) {
+  const [user, setUser] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const currentUser = await userService.getCurrentUser();
+        setUser(currentUser);
+      } catch (error) {
+        console.error('Error loading user:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isVisible) {
+      loadUser();
+    }
+  }, [isVisible]);
+
   if (!isVisible) return null;
 
   const handleManageSubscription = () => {
     window.open('https://billing.stripe.com/p/login/test_dRmdRbcurfW97JAdhBgUM00', '_blank');
   };
 
-  // Mock credits data - will be fetched from Supabase later
-  const creditsRemaining = 380;
-  const creditsUsed = 120;
-  const totalCredits = 500;
+  // Calculate credits based on user tier
+  const tierConfig = user ? TIER_CONFIG[user.tier] : TIER_CONFIG.anonymous;
+  const creditsRemaining = user ? user.credits : tierConfig.credits;
+  const creditsUsed = user ? tierConfig.credits - user.credits : 0;
+  const totalCredits = tierConfig.credits;
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
@@ -1482,11 +1514,11 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode }: {
               <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
                 <div 
                   className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${(creditsRemaining / totalCredits) * 100}%` }}
+                  style={{ width: `${totalCredits > 0 ? (creditsRemaining / totalCredits) * 100 : 0}%` }}
                 ></div>
               </div>
               <div className={`text-xs text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                {Math.round((creditsRemaining / totalCredits) * 100)}% remaining
+                {totalCredits > 0 ? `${Math.round((creditsRemaining / totalCredits) * 100)}% remaining` : 'Subscribe for More Credits'}
               </div>
             </div>
 
@@ -1605,45 +1637,31 @@ function UsagePage({ isVisible, onBack, isDark }: {
   onBack: () => void;
   isDark: boolean;
 }) {
-  if (!isVisible) return null;
+  const [usageData, setUsageData] = useState<any[]>([]);
+  const [user, setUser] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const usageData = [
-    {
-      date: '2 August 2025 01:46 PM',
-      description: 'Used 11 credits.',
-      type: 'usage'
-    },
-    {
-      date: '2 August 2025 01:46 PM',
-      description: 'Converted a 11 page PDF.',
-      type: 'conversion'
-    },
-    {
-      date: '2 August 2025 01:34 PM',
-      description: 'Used 9 credits.',
-      type: 'usage'
-    },
-    {
-      date: '2 August 2025 01:33 PM',
-      description: 'Converted a 9 page PDF.',
-      type: 'conversion'
-    },
-    {
-      date: '30 July 2025 10:37 PM',
-      description: 'Acquired 400 credits.',
-      type: 'acquisition'
-    },
-    {
-      date: '30 July 2025 10:37 PM',
-      description: 'Converted a 9 page PDF.',
-      type: 'conversion'
-    },
-    {
-      date: '30 July 2025 10:37 PM',
-      description: 'Converted a 9 page PDF.',
-      type: 'conversion'
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const currentUser = await userService.getCurrentUser();
+        setUser(currentUser);
+        
+        const history = await userService.getUsageHistory();
+        setUsageData(history);
+      } catch (error) {
+        console.error('Error loading usage data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isVisible) {
+      loadData();
     }
-  ];
+  }, [isVisible]);
+
+  if (!isVisible) return null;
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
@@ -1689,7 +1707,7 @@ function UsagePage({ isVisible, onBack, isDark }: {
               Usage
             </h1>
             <p className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              380 credits available
+              {user ? `${user.credits} credits available` : '0 credits available'}
             </p>
           </div>
           
@@ -2273,6 +2291,8 @@ function App() {
   const [showPastDocumentsPage, setShowPastDocumentsPage] = useState(false);
   const [showAuthPage, setShowAuthPage] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false); // Simulate signed in state
+  const [showTierTester, setShowTierTester] = useState(false);
+  const [comparisonGenerated, setComparisonGenerated] = useState(false);
 
   const parser = new BankStatementParser();
 
@@ -2288,65 +2308,100 @@ function App() {
     
     setFiles(prev => ({ ...prev, [statementKey]: file }));
     setUploading(prev => ({ ...prev, [statementKey]: true }));
+    setComparisonGenerated(false);
+    setComparisonResults(null);
     
-    try {
-      const result = await parser.parsePDF(file);
-      setParsedData(prev => ({ ...prev, [statementKey]: result }));
-    } catch (error) {
-      console.error('Error parsing PDF:', error);
-    } finally {
+    // Just show upload successful, don't process API yet
+    setTimeout(() => {
       setUploading(prev => ({ ...prev, [statementKey]: false }));
-    }
+    }, 1000);
   };
 
-  const generateComparison = () => {
-    if (!parsedData.statement1 || !parsedData.statement2 || selectedCategories.length === 0) {
+  const generateComparison = async () => {
+    if (!files.statement1 || !files.statement2) {
+      alert('Please upload both statements first.');
       return;
     }
 
-    // Mark anonymous usage if user is not signed in
-    if (!isSignedIn) {
-      setAnonymousUsage();
-    }
+    setUploading({ statement1: true, statement2: true });
+    
+    try {
+      // Process both files through API
+      const [result1, result2] = await Promise.all([
+        parser.parsePDF(files.statement1),
+        parser.parsePDF(files.statement2)
+      ]);
+      
+      setParsedData({ statement1: result1, statement2: result2 });
+      
+      // Calculate total pages processed from both statements
+      const totalPages = (result1.transactions.length + result2.transactions.length);
+      
+      // Check tier limits before allowing comparison
+      const tierCheck = await userService.canPerformAction('comparison', totalPages);
+      
+      if (!tierCheck.canPerform) {
+        alert(tierCheck.reason || 'You have reached your tier limit. Please upgrade to continue.');
+        return;
+      }
 
-    const comparison: { [key: string]: ComparisonResult } = {};
-    
-    selectedCategories.forEach(categoryId => {
-      // Calculate withdrawals for each statement
-      const withdrawals1 = parsedData.statement1!.withdrawals
-        .filter(t => t.category === categoryId)
-        .reduce((sum, t) => sum + t.amount, 0);
+      // Mark anonymous usage if user is not signed in
+      if (!isSignedIn) {
+        setAnonymousUsage();
+      }
+
+      // Generate comparison for ALL categories (not just selected ones)
+      const comparison: { [key: string]: ComparisonResult } = {};
+      
+      categories.forEach(category => {
+        const categoryId = category.id;
         
-      const withdrawals2 = parsedData.statement2!.withdrawals
-        .filter(t => t.category === categoryId)
-        .reduce((sum, t) => sum + t.amount, 0);
-      
-      // Calculate deposits for each statement
-      const deposits1 = parsedData.statement1!.deposits
-        .filter(t => t.category === categoryId)
-        .reduce((sum, t) => sum + t.amount, 0);
+        // Calculate withdrawals for each statement
+        const withdrawals1 = result1.withdrawals
+          .filter(t => t.category === categoryId)
+          .reduce((sum, t) => sum + t.amount, 0);
+          
+        const withdrawals2 = result2.withdrawals
+          .filter(t => t.category === categoryId)
+          .reduce((sum, t) => sum + t.amount, 0);
         
-      const deposits2 = parsedData.statement2!.deposits
-        .filter(t => t.category === categoryId)
-        .reduce((sum, t) => sum + t.amount, 0);
+        // Calculate deposits for each statement
+        const deposits1 = result1.deposits
+          .filter(t => t.category === categoryId)
+          .reduce((sum, t) => sum + t.amount, 0);
+          
+        const deposits2 = result2.deposits
+          .filter(t => t.category === categoryId)
+          .reduce((sum, t) => sum + t.amount, 0);
+        
+        // For spending categories, focus on withdrawals (money going out)
+        // For income categories, focus on deposits (money coming in)
+        const isIncomeCategory = categoryId === 'income';
+        
+        const amount1 = isIncomeCategory ? deposits1 : withdrawals1;
+        const amount2 = isIncomeCategory ? deposits2 : withdrawals2;
+        
+        comparison[categoryId] = {
+          category: categoryId,
+          statement1: amount1,
+          statement2: amount2,
+          difference: Math.abs(amount1 - amount2),
+          winner: amount1 > amount2 ? 'Statement 2' : 'Statement 1'
+        };
+      });
       
-      // For spending categories, focus on withdrawals (money going out)
-      // For income categories, focus on deposits (money coming in)
-      const isIncomeCategory = categoryId === 'income';
+      setComparisonResults(comparison);
+      setComparisonGenerated(true);
       
-      const amount1 = isIncomeCategory ? deposits1 : withdrawals1;
-      const amount2 = isIncomeCategory ? deposits2 : withdrawals2;
+      // Log the usage based on pages processed
+      await userService.logUsage('comparison', totalPages);
       
-      comparison[categoryId] = {
-        category: categoryId,
-        statement1: amount1,
-        statement2: amount2,
-        difference: Math.abs(amount1 - amount2),
-        winner: amount1 > amount2 ? 'Statement 1' : 'Statement 2'
-      };
-    });
-    
-    setComparisonResults(comparison);
+    } catch (error) {
+      console.error('Error processing PDFs:', error);
+      alert('Error processing PDFs. Please try again.');
+    } finally {
+      setUploading({ statement1: false, statement2: false });
+    }
   };
 
   const handlePayment = async () => {
@@ -2623,6 +2678,14 @@ function App() {
                         Settings
                       </button>
                       <button 
+                        onClick={() => setShowTierTester(true)}
+                        className={`text-sm font-medium transition-colors hover:scale-105 ${
+                          isDarkMode ? 'text-gray-300 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
+                        }`}
+                      >
+                        Tier Test
+                      </button>
+                      <button 
                         onClick={() => setShowAuthPage(true)}
                         className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                           isDarkMode 
@@ -2732,6 +2795,25 @@ function App() {
           />
         </div>
 
+        {/* Generate Comparison Button */}
+        {bothFilesUploaded && (
+          <div className="text-center mb-8">
+            <button
+              onClick={generateComparison}
+              className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 ${
+                isDarkMode 
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl' 
+                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
+              }`}
+            >
+              Generate Comparison
+            </button>
+            <p className={`text-sm mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              This will process all categories and charge based on pages processed
+            </p>
+          </div>
+        )}
+
         {/* Transaction Editors */}
         {showTransactionEditor.statement1 && parsedData.statement1 && (
           <div className="mb-8">
@@ -2758,7 +2840,7 @@ function App() {
         )}
 
         {/* Category Selection */}
-        {bothFilesUploaded && (
+        {bothFilesUploaded && comparisonGenerated && (
           <div className={`rounded-xl p-6 shadow-lg border mb-8 ${
             isDarkMode 
               ? 'bg-gray-800 border-gray-700' 
@@ -2873,7 +2955,7 @@ function App() {
         )}
 
         {/* Results */}
-        {comparisonResults && (
+        {comparisonResults && comparisonGenerated && (
           <div className="space-y-6">
             <ComparisonResults
               data={comparisonResults}
@@ -3170,6 +3252,12 @@ function App() {
           onOpenAuth={() => setShowAuthPage(true)}
         />
       )}
+      
+      <TierTester
+        isVisible={showTierTester}
+        onClose={() => setShowTierTester(false)}
+        isDark={isDarkMode}
+      />
     </>
   );
 }
