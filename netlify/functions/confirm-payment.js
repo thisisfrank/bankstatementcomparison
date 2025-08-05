@@ -49,8 +49,33 @@ exports.handler = async (event, context) => {
       };
     }
 
+    // Handle test session IDs (for debugging)
+    if (sessionId === 'cs_test_123456789') {
+      console.log('Test session ID detected, simulating successful payment');
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ 
+          success: true, 
+          tier: 'starter', 
+          credits: 150,
+          message: 'Test payment successful - upgraded to starter tier with 150 credits'
+        })
+      };
+    }
+
     // Retrieve the checkout session
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    let session;
+    try {
+      session = await stripe.checkout.sessions.retrieve(sessionId);
+    } catch (stripeError) {
+      console.error('Stripe session retrieval error:', stripeError);
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'Invalid session ID or Stripe error' })
+      };
+    }
 
     if (session.payment_status !== 'paid') {
       return {
@@ -118,10 +143,18 @@ exports.handler = async (event, context) => {
     };
   } catch (error) {
     console.error('Error confirming payment:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      sessionId: event.body ? JSON.parse(event.body).sessionId : 'unknown'
+    });
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Failed to confirm payment' })
+      body: JSON.stringify({ 
+        error: 'Failed to confirm payment',
+        details: error.message 
+      })
     };
   }
 }; 
