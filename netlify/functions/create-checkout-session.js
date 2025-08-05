@@ -1,7 +1,7 @@
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
@@ -15,6 +15,8 @@ const STRIPE_PRICE_IDS = {
 };
 
 exports.handler = async (event, context) => {
+  const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
   // Enable CORS
   const headers = {
     'Access-Control-Allow-Origin': '*',
