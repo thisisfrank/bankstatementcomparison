@@ -2548,9 +2548,11 @@ function App() {
       try {
         // Check for valid session instead of cached user data
         const { data: { session } } = await supabase.auth.getSession();
+        console.log('Initial session check:', session ? 'Session exists' : 'No session', session?.user?.id);
         
         if (session?.user) {
           // Valid session exists, user is authenticated
+          console.log('Setting authenticated state to true for user:', session.user.id);
           setIsAuthenticated(true);
           setIsSignedIn(true);
           
@@ -2564,6 +2566,7 @@ function App() {
           }
         } else {
           // No valid session, user is not authenticated
+          console.log('No session found, setting authenticated state to false');
           setIsAuthenticated(false);
           setIsSignedIn(false);
           setUserTier(undefined);

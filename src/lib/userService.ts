@@ -324,11 +324,32 @@ export class UserService {
 
   // Sign out
   async signOut(): Promise<void> {
-    await supabase.auth.signOut()
-    this.currentUser = null
-    this.sessionId = null
-    // Clear anonymous session when user signs out
-    this.clearAnonymousSession()
+    console.log('Signing out user...');
+    try {
+      // Clear session completely
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
+      if (error) {
+        console.error('Error during signOut:', error);
+      } else {
+        console.log('Successfully signed out from Supabase');
+      }
+    } catch (error) {
+      console.error('Exception during signOut:', error);
+    }
+    
+    // Clear all local state
+    this.currentUser = null;
+    this.sessionId = null;
+    this.clearAnonymousSession();
+    
+    // Clear any localStorage that might persist session
+    try {
+      localStorage.removeItem('sb-' + import.meta.env.VITE_SUPABASE_URL?.split('//')[1]?.split('.')[0] + '-auth-token');
+    } catch (e) {
+      console.log('Could not clear localStorage auth token');
+    }
+    
+    console.log('Local state cleared after sign out');
   }
 
   // Update user tier and credits after successful payment
