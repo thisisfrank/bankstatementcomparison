@@ -143,16 +143,21 @@ export class UserService {
 
   // Get current user profile
   async getCurrentUser(): Promise<Profile | null> {
-    if (this.currentUser) {
-      return this.currentUser
-    }
-
+    // Always check auth status first to ensure we have fresh data
     const { data: { user } } = await supabase.auth.getUser()
+    
     if (user) {
+      // If we have a cached user with the same ID, return it
+      if (this.currentUser && this.currentUser.id === user.id) {
+        return this.currentUser
+      }
+      // Otherwise load fresh profile
       await this.loadUserProfile(user.id)
       return this.currentUser
     }
 
+    // No authenticated user, clear any cached data
+    this.currentUser = null
     return null
   }
 

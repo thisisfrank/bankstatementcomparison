@@ -3,8 +3,7 @@ import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 import { userService } from './lib/userService';
-import { Profile, TIER_CONFIG } from './lib/supabase';
-import { supabase } from './lib/supabase';
+import { Profile, TIER_CONFIG, supabase } from './lib/supabase';
 import { stripeService, StripePlanId } from './lib/stripeService';
 
 
@@ -1436,7 +1435,7 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
             {plans.map((plan, index) => (
               <div key={plan.name} className={`p-6 rounded-xl border shadow-lg ${
                 isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-              } ${plan.isAnonymous ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : ''}`}>
+              } ${plan.isAnonymous ? 'border-blue-500' : ''}`}>
                 <div className="text-center mb-6">
                   <h3 className={`text-xl font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                     {plan.name}
@@ -1673,70 +1672,7 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
               </div>
             </div>
 
-            {/* Debug Section */}
-            <div className={`p-6 rounded-lg border ${
-              isDark ? 'bg-red-900/20 border-red-600' : 'bg-red-50 border-red-200'
-            }`}>
-              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
-                isDark ? 'text-red-200' : 'text-red-800'
-              }`}>
-                🐛 Debug Tools
-              </h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <div className={`font-medium ${isDark ? 'text-red-200' : 'text-red-800'}`}>
-                    Test Payment Success
-                  </div>
-                  <div className={`text-sm ${isDark ? 'text-red-300' : 'text-red-600'}`}>
-                    Manually trigger payment success flow for testing
-                  </div>
-                  <button
-                    onClick={() => {
-                      // Simulate a payment success URL
-                      const testUrl = `${window.location.origin}?session_id=cs_test_123456789`;
-                      window.history.pushState({}, '', testUrl);
-                      window.location.reload();
-                    }}
-                    className={`mt-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                      isDark 
-                        ? 'bg-red-600 hover:bg-red-700 text-white' 
-                        : 'bg-red-600 hover:bg-red-700 text-white'
-                    }`}
-                  >
-                    Test Payment Success Flow
-                  </button>
-                </div>
 
-                <div>
-                  <div className={`font-medium ${isDark ? 'text-red-200' : 'text-red-800'}`}>
-                    Check Authentication
-                  </div>
-                  <div className={`text-sm ${isDark ? 'text-red-300' : 'text-red-600'}`}>
-                    Debug current authentication status
-                  </div>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const authStatus = await userService.debugAuthStatus();
-                        console.log('Auth Status:', authStatus);
-                        alert(`Auth Status: ${JSON.stringify(authStatus, null, 2)}`);
-                      } catch (error) {
-                        console.error('Auth check error:', error);
-                        alert(`Auth check error: ${error}`);
-                      }
-                    }}
-                    className={`mt-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                      isDark 
-                        ? 'bg-red-600 hover:bg-red-700 text-white' 
-                        : 'bg-red-600 hover:bg-red-700 text-white'
-                    }`}
-                  >
-                    Check Auth Status
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -1757,18 +1693,38 @@ function UsagePage({ isVisible, onBack, isDark }: {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const currentUser = await userService.getCurrentUser();
-        setUser(currentUser);
+        // First check if user is actually authenticated with Supabase
+        const { data: { user: authUser } } = await supabase.auth.getUser();
         
-        // If no authenticated user, check anonymous usage
+        let currentUser = null;
+        if (authUser) {
+          // User is authenticated, get their profile
+          currentUser = await userService.getCurrentUser();
+          setUser(currentUser);
+        } else {
+          // User is not authenticated, treat as anonymous
+          setUser(null);
+        }
+        
+        // Get usage history (only call once)
+        const history = await userService.getUsageHistory();
+        
+        // Calculate anonymous usage if not authenticated
         if (!currentUser) {
-          const usageHistory = await userService.getUsageHistory();
-          const totalUsed = usageHistory.reduce((sum, log) => sum + log.credits_used, 0);
+          const totalUsed = history.reduce((sum, log) => sum + log.credits_used, 0);
           setAnonymousUsage(totalUsed);
         }
         
-        const history = await userService.getUsageHistory();
-        
+        // Helper function to get tier name from credits used
+        const getTierNameFromCredits = (creditsUsed: number): string => {
+          switch (creditsUsed) {
+            case 150: return 'Starter';
+            case 400: return 'Pro';
+            case 1000: return 'Business';
+            default: return 'Unknown Tier';
+          }
+        };
+
         // Format the usage data for display
         const formattedHistory = history.map(log => ({
           id: log.id,
@@ -1779,14 +1735,22 @@ function UsagePage({ isVisible, onBack, isDark }: {
             hour: '2-digit',
             minute: '2-digit'
           }),
-          description: `${log.action === 'comparison' ? 'Bank Statement Comparison' : 'Page Processing'} - ${log.pages_processed} page${log.pages_processed > 1 ? 's' : ''}`,
+          description: log.action === 'comparison' 
+            ? `Bank Statement Comparison - ${log.pages_processed} page${log.pages_processed > 1 ? 's' : ''}`
+            : log.action === 'credit_purchase'
+            ? `Upgraded to ${getTierNameFromCredits(log.credits_used)}`
+            : `Page Processing - ${log.pages_processed} page${log.pages_processed > 1 ? 's' : ''}`,
           creditsUsed: log.credits_used,
+          action: log.action,
           type: 'usage'
         }));
         
         setUsageData(formattedHistory);
       } catch (error) {
         console.error('Error loading usage data:', error);
+        // Set empty data on error to prevent infinite loading
+        setUsageData([]);
+        setAnonymousUsage(0);
       } finally {
         setLoading(false);
       }
@@ -1800,6 +1764,7 @@ function UsagePage({ isVisible, onBack, isDark }: {
   if (!isVisible) return null;
 
   // Calculate credits based on user tier
+  // For anonymous users, always use the anonymous tier config regardless of any cached user data
   const tierConfig = user ? TIER_CONFIG[user.tier] : TIER_CONFIG.anonymous;
   const creditsRemaining = user ? user.credits : (tierConfig.credits - anonymousUsage);
   const creditsUsed = user ? (tierConfig.credits - user.credits) : anonymousUsage;
@@ -1848,9 +1813,7 @@ function UsagePage({ isVisible, onBack, isDark }: {
             <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
               Usage
             </h1>
-            <p className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              {user ? `${user.credits} credits available` : `${creditsRemaining} credits available`}
-            </p>
+            
           </div>
           
           {/* Credits Section */}
@@ -1939,8 +1902,12 @@ function UsagePage({ isVisible, onBack, isDark }: {
                       <td className={`py-3 px-4 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                         {item.description}
                       </td>
-                      <td className={`py-3 px-4 font-semibold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                        -{item.creditsUsed}
+                      <td className={`py-3 px-4 font-semibold ${
+                        item.action === 'credit_purchase' 
+                          ? isDark ? 'text-green-400' : 'text-green-600'
+                          : isDark ? 'text-red-400' : 'text-red-600'
+                      }`}>
+                        {item.action === 'credit_purchase' ? item.creditsUsed : `-${item.creditsUsed}`}
                       </td>
                     </tr>
                   ))}
@@ -2574,18 +2541,41 @@ function App() {
   const [isGeneratingComparison, setIsGeneratingComparison] = useState(false);
 
 
-  // Check authentication status on component mount
+  // Check authentication status and listen for changes
   useEffect(() => {
     const checkAuthStatus = async () => {
       const user = await userService.getCurrentUser();
-      setIsAuthenticated(!!user);
+      const isAuth = !!user;
+      setIsAuthenticated(isAuth);
+      setIsSignedIn(isAuth); // Keep both states in sync
       if (user) {
         setUserTier(user.tier);
       } else {
         setUserTier(undefined);
       }
     };
+    
     checkAuthStatus();
+
+    // Listen for auth state changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.id);
+      
+      if (event === 'SIGNED_OUT' || !session) {
+        setIsAuthenticated(false);
+        setIsSignedIn(false);
+        setUserTier(undefined);
+      } else if (event === 'SIGNED_IN' && session) {
+        const user = await userService.getCurrentUser();
+        setIsAuthenticated(true);
+        setIsSignedIn(true);
+        setUserTier(user?.tier);
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   // Check for payment success/cancellation URL
@@ -2613,6 +2603,7 @@ function App() {
         const user = await userService.getCurrentUser();
         if (user) {
           setIsAuthenticated(true);
+          setIsSignedIn(true); // Keep both states in sync
           setUserTier(user.tier);
           
           // Show success message
@@ -3099,7 +3090,18 @@ function App() {
                         Settings
                       </button>
                       <button 
-                        onClick={() => setIsSignedIn(false)}
+                        onClick={async () => {
+                          try {
+                            await userService.signOut();
+                            // State will be updated by the auth listener
+                          } catch (error) {
+                            console.error('Sign out error:', error);
+                            // Still update UI state if sign out fails
+                            setIsSignedIn(false);
+                            setIsAuthenticated(false);
+                            setUserTier(undefined);
+                          }
+                        }}
                         className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                           isDarkMode 
                             ? 'bg-gray-600 text-white hover:bg-gray-700 hover:scale-105' 
@@ -3642,7 +3644,10 @@ function App() {
         <AuthPage
           isVisible={showAuthPage}
           onBack={() => setShowAuthPage(false)}
-          onSignIn={() => setIsSignedIn(true)}
+          onSignIn={() => {
+            setIsSignedIn(true);
+            setIsAuthenticated(true);
+          }}
           isDark={isDarkMode}
         />
       ) : showPricingModal ? (
