@@ -9,9 +9,9 @@ const supabase = createClient(
 
 // Stripe price IDs for each tier
 const STRIPE_PRICE_IDS = {
-  starter: 'price_1OqX8X2eZvKYlo2C1234567890', // Replace with your actual price IDs
-  pro: 'price_1OqX8X2eZvKYlo2C1234567891',
-  business: 'price_1OqX8X2eZvKYlo2C1234567892'
+  starter: 'price_1Rrpe8RD0ogceRR4LdVUllat',
+  pro: 'price_1Rrrw7RD0ogceRR4BEdntV12',
+  business: 'price_1RrrwQRD0ogceRR41ZscbkhJ'
 };
 
 module.exports = async (req, res) => {
