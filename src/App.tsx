@@ -5,6 +5,7 @@ import { loadStripe } from '@stripe/stripe-js';
 import { userService } from './lib/userService';
 import { Profile, TIER_CONFIG } from './lib/supabase';
 import { supabase } from './lib/supabase';
+import { PaymentSuccess } from './components/PaymentSuccess';
 
 
 // Stripe Configuration
@@ -2511,6 +2512,7 @@ function App() {
 
   const [comparisonGenerated, setComparisonGenerated] = useState(false);
   const [isGeneratingComparison, setIsGeneratingComparison] = useState(false);
+  const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
 
   // Check authentication status on component mount
   useEffect(() => {
@@ -2524,6 +2526,16 @@ function App() {
       }
     };
     checkAuthStatus();
+  }, []);
+
+  // Check for payment success URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
+    
+    if (sessionId) {
+      setShowPaymentSuccess(true);
+    }
   }, []);
 
   const parser = new BankStatementParser();
@@ -3580,8 +3592,16 @@ function App() {
           onOpenAuth={() => setShowAuthPage(true)}
         />
       )}
-      
 
+      <PaymentSuccess
+        isVisible={showPaymentSuccess}
+        onClose={() => {
+          setShowPaymentSuccess(false);
+          // Clear the URL parameters
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }}
+        isDark={isDarkMode}
+      />
       
     </>
   );
