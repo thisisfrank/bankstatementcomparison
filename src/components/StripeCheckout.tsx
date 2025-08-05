@@ -38,7 +38,7 @@ export function StripeCheckout({ isVisible, onClose, isDark, selectedTier }: Str
     
     try {
       // Create dynamic checkout session
-      await StripeService.createCheckoutSession(selectedTier, 'current-user-id');
+      await StripeService.createCheckoutSession(selectedTier);
     } catch (error) {
       console.error('Error creating checkout session:', error);
       alert('Failed to create checkout session. Please try again.');

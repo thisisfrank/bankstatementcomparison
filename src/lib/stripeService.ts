@@ -11,12 +11,12 @@ const STRIPE_PRICE_IDS = {
 };
 
 export class StripeService {
-  static async createCheckoutSession(tier: 'starter' | 'pro' | 'business', userId: string) {
+  static async createCheckoutSession(tier: 'starter' | 'pro' | 'business') {
     try {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        throw new Error('User not authenticated');
+        throw new Error('User not authenticated. Please sign in or sign up first.');
       }
 
       // Create checkout session via your backend API
@@ -34,7 +34,8 @@ export class StripeService {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create checkout session');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to create checkout session');
       }
 
       const { sessionId } = await response.json();
@@ -49,6 +50,34 @@ export class StripeService {
     } catch (error) {
       console.error('Error creating checkout session:', error);
       throw error;
+    }
+  }
+
+  // Debug function to check authentication before checkout
+  static async debugCheckoutReadiness(tier: 'starter' | 'pro' | 'business'): Promise<{
+    canProceed: boolean;
+    error?: string;
+    userId?: string;
+  }> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        return { 
+          canProceed: false, 
+          error: 'User not authenticated. Please sign in or sign up first.' 
+        };
+      }
+
+      return { 
+        canProceed: true, 
+        userId: user.id 
+      };
+    } catch (error: any) {
+      return { 
+        canProceed: false, 
+        error: error.message 
+      };
     }
   }
 

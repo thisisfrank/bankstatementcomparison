@@ -92,7 +92,15 @@ export class UserService {
         // Create user profile
         await this.createUserProfile(data.user.id, fullName)
         await this.loadUserProfile(data.user.id)
-        return { success: true }
+        
+        // Check if user needs email confirmation
+        if (data.session) {
+          // User is immediately authenticated (no email confirmation required)
+          return { success: true }
+        } else {
+          // User needs to confirm email
+          return { success: false, error: 'Please check your email to confirm your account before proceeding.' }
+        }
       }
 
       return { success: false, error: 'Sign up failed' }
@@ -146,6 +154,25 @@ export class UserService {
     }
 
     return null
+  }
+
+  // Debug function to check authentication status
+  async debugAuthStatus(): Promise<{ isAuthenticated: boolean; userId?: string; error?: string }> {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser()
+      
+      if (error) {
+        return { isAuthenticated: false, error: error.message }
+      }
+      
+      if (user) {
+        return { isAuthenticated: true, userId: user.id }
+      }
+      
+      return { isAuthenticated: false }
+    } catch (error: any) {
+      return { isAuthenticated: false, error: error.message }
+    }
   }
 
   // Check if user can perform action based on tier
