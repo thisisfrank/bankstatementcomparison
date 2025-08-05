@@ -96,3 +96,4 @@ Use Stripe's test card numbers:
 - Use Supabase service role key only on server-side (webhook handler)
 - Never expose Stripe secret keys in frontend code
 - All checkout URLs are hosted by Stripe (secure by default)
+- Environment variables properly configured ✅
