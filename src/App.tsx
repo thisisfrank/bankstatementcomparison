@@ -1677,6 +1677,71 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
                 </button>
               </div>
             </div>
+
+            {/* Debug Section */}
+            <div className={`p-6 rounded-lg border ${
+              isDark ? 'bg-red-900/20 border-red-600' : 'bg-red-50 border-red-200'
+            }`}>
+              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                isDark ? 'text-red-200' : 'text-red-800'
+              }`}>
+                🐛 Debug Tools
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <div className={`font-medium ${isDark ? 'text-red-200' : 'text-red-800'}`}>
+                    Test Payment Success
+                  </div>
+                  <div className={`text-sm ${isDark ? 'text-red-300' : 'text-red-600'}`}>
+                    Manually trigger payment success flow for testing
+                  </div>
+                  <button
+                    onClick={() => {
+                      // Simulate a payment success URL
+                      const testUrl = `${window.location.origin}?session_id=cs_test_123456789`;
+                      window.history.pushState({}, '', testUrl);
+                      window.location.reload();
+                    }}
+                    className={`mt-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      isDark 
+                        ? 'bg-red-600 hover:bg-red-700 text-white' 
+                        : 'bg-red-600 hover:bg-red-700 text-white'
+                    }`}
+                  >
+                    Test Payment Success Flow
+                  </button>
+                </div>
+
+                <div>
+                  <div className={`font-medium ${isDark ? 'text-red-200' : 'text-red-800'}`}>
+                    Check Authentication
+                  </div>
+                  <div className={`text-sm ${isDark ? 'text-red-300' : 'text-red-600'}`}>
+                    Debug current authentication status
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const authStatus = await userService.debugAuthStatus();
+                        console.log('Auth Status:', authStatus);
+                        alert(`Auth Status: ${JSON.stringify(authStatus, null, 2)}`);
+                      } catch (error) {
+                        console.error('Auth check error:', error);
+                        alert(`Auth check error: ${error}`);
+                      }
+                    }}
+                    className={`mt-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      isDark 
+                        ? 'bg-red-600 hover:bg-red-700 text-white' 
+                        : 'bg-red-600 hover:bg-red-700 text-white'
+                    }`}
+                  >
+                    Check Auth Status
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2533,7 +2598,11 @@ function App() {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionId = urlParams.get('session_id');
     
+    console.log('URL params:', window.location.search);
+    console.log('Session ID found:', sessionId);
+    
     if (sessionId) {
+      console.log('Setting showPaymentSuccess to true');
       setShowPaymentSuccess(true);
     }
   }, []);
