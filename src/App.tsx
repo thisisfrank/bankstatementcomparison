@@ -935,11 +935,11 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
     try {
       // For now, simulate Google auth - will implement later
       await new Promise(resolve => setTimeout(resolve, 1500));
+      setIsLoading(false); // Clear loading state before callbacks
       onSignIn();
       onBack();
     } catch (error) {
       setError('Google sign-in failed. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -968,14 +968,15 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
       }
 
       if (result.success) {
+        setIsLoading(false); // Clear loading state before callbacks
         onSignIn();
         onBack();
       } else {
         setError(result.error || 'Authentication failed');
+        setIsLoading(false);
       }
     } catch (error: any) {
       setError(error.message || 'Authentication failed. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };
