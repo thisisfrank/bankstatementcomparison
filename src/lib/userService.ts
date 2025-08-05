@@ -127,17 +127,43 @@ export class UserService {
 
   // Load user profile
   private async loadUserProfile(userId: string): Promise<void> {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    try {
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Database timeout')), 5000)
+      );
+      
+      const dbPromise = supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-    if (error) {
-      console.error('Error loading user profile:', error)
-      this.currentUser = null
-    } else {
-      this.currentUser = data
+      const { data, error } = await Promise.race([dbPromise, timeoutPromise]) as any;
+
+      if (error) {
+        console.error('Error loading user profile:', error);
+        // Create a minimal user profile if database fails
+        this.currentUser = {
+          id: userId,
+          tier: 'signup' as const,
+          credits: 10,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+      } else {
+        this.currentUser = data;
+      }
+    } catch (error) {
+      console.error('Database connection failed:', error);
+      // Create a minimal user profile if database connection fails
+      this.currentUser = {
+        id: userId,
+        tier: 'signup' as const,
+        credits: 10,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
     }
   }
 
@@ -266,22 +292,34 @@ export class UserService {
 
   // Get usage history
   async getUsageHistory(): Promise<UsageLog[]> {
-    const user = await this.getCurrentUser()
-    const sessionId = this.getSessionId()
+    try {
+      const user = await this.getCurrentUser()
+      const sessionId = this.getSessionId()
 
-    const { data, error } = await supabase
-      .from('usage_logs')
-      .select('*')
-      .eq(user ? 'user_id' : 'session_id', user?.id || sessionId)
-      .order('created_at', { ascending: false })
-      .limit(50)
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Database timeout')), 5000)
+      );
+      
+      const dbPromise = supabase
+        .from('usage_logs')
+        .select('*')
+        .eq(user ? 'user_id' : 'session_id', user?.id || sessionId)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-    if (error) {
-      console.error('Error fetching usage history:', error)
-      return []
+      const { data, error } = await Promise.race([dbPromise, timeoutPromise]) as any;
+
+      if (error) {
+        console.error('Error fetching usage history:', error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error('Database connection failed for usage history:', error);
+      return [];
     }
-
-    return data || []
   }
 
   // Sign out

@@ -2545,13 +2545,33 @@ function App() {
   // Check authentication status and listen for changes
   useEffect(() => {
     const checkAuthStatus = async () => {
-      const user = await userService.getCurrentUser();
-      const isAuth = !!user;
-      setIsAuthenticated(isAuth);
-      setIsSignedIn(isAuth); // Keep both states in sync
-      if (user) {
-        setUserTier(user.tier);
-      } else {
+      try {
+        // First check if user is authenticated with Supabase directly
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        
+        if (authUser) {
+          // User is authenticated, set state immediately
+          setIsAuthenticated(true);
+          setIsSignedIn(true);
+          
+          // Try to get full profile, but don't block on it
+          try {
+            const user = await userService.getCurrentUser();
+            setUserTier(user?.tier || 'signup');
+          } catch (error) {
+            console.error('Error loading user profile on init:', error);
+            setUserTier('signup'); // Fallback tier
+          }
+        } else {
+          setIsAuthenticated(false);
+          setIsSignedIn(false);
+          setUserTier(undefined);
+        }
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+        // Assume not authenticated on error
+        setIsAuthenticated(false);
+        setIsSignedIn(false);
         setUserTier(undefined);
       }
     };
@@ -2567,10 +2587,19 @@ function App() {
         setIsSignedIn(false);
         setUserTier(undefined);
       } else if (event === 'SIGNED_IN' && session) {
-        const user = await userService.getCurrentUser();
-        setIsAuthenticated(true);
-        setIsSignedIn(true);
-        setUserTier(user?.tier);
+        try {
+          // Set auth state immediately to prevent hanging UI
+          setIsAuthenticated(true);
+          setIsSignedIn(true);
+          
+          // Try to get user profile with timeout
+          const user = await userService.getCurrentUser();
+          setUserTier(user?.tier);
+        } catch (error) {
+          console.error('Error loading user profile after sign in:', error);
+          // Keep user signed in even if profile loading fails
+          setUserTier('signup'); // Default fallback tier
+        }
       }
     });
 
