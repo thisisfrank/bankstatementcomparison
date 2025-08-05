@@ -2585,12 +2585,20 @@ function App() {
     // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.id);
+      console.log('Session details:', session ? {
+        access_token: session.access_token ? 'present' : 'missing',
+        refresh_token: session.refresh_token ? 'present' : 'missing',
+        expires_at: session.expires_at,
+        user_id: session.user?.id
+      } : 'no session');
       
       if (event === 'SIGNED_OUT' || !session) {
+        console.log('Processing SIGNED_OUT event');
         setIsAuthenticated(false);
         setIsSignedIn(false);
         setUserTier(undefined);
       } else if (event === 'SIGNED_IN' && session) {
+        console.log('Processing SIGNED_IN event - this should not happen if user clicked sign out!');
         try {
           // Set auth state immediately to prevent hanging UI
           setIsAuthenticated(true);

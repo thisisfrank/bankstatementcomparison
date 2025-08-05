@@ -342,14 +342,38 @@ export class UserService {
     this.sessionId = null;
     this.clearAnonymousSession();
     
-    // Clear any localStorage that might persist session
+    // Aggressively clear all possible storage locations
     try {
-      localStorage.removeItem('sb-' + import.meta.env.VITE_SUPABASE_URL?.split('//')[1]?.split('.')[0] + '-auth-token');
+      // Clear all localStorage keys that might contain auth data
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('supabase') || key.includes('auth') || key.includes('session'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => {
+        console.log('Removing localStorage key:', key);
+        localStorage.removeItem(key);
+      });
+      
+      // Also clear sessionStorage
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && (key.includes('supabase') || key.includes('auth') || key.includes('session'))) {
+          console.log('Removing sessionStorage key:', key);
+          sessionStorage.removeItem(key);
+        }
+      }
     } catch (e) {
-      console.log('Could not clear localStorage auth token');
+      console.log('Could not clear storage:', e);
     }
     
-    console.log('Local state cleared after sign out');
+    console.log('Local state and storage cleared after sign out');
+    
+    // Force reload the page to ensure clean state
+    console.log('Forcing page reload to ensure clean state...');
+    window.location.reload();
   }
 
   // Update user tier and credits after successful payment
