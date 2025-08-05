@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:server": "node server.js",
+    "dev:netlify": "netlify dev"
   },
   "dependencies": {
     "@stripe/stripe-js": "^7.8.0",
