@@ -99,6 +99,7 @@ export class StripeService {
   checkPaymentSuccess(): { success: boolean; planId?: StripePlanId; userId?: string } {
     const urlParams = new URLSearchParams(window.location.search);
     
+    // Check for our custom success parameter
     if (urlParams.get('payment_success') === 'true') {
       const planId = urlParams.get('plan') as StripePlanId;
       const userId = urlParams.get('user_id') || undefined;
@@ -106,13 +107,19 @@ export class StripeService {
       if (planId && STRIPE_PLANS[planId]) {
         return { success: true, planId, userId };
       }
+      
+      // Even without plan info, it's still a success
+      return { success: true };
     }
 
-    // Also check for Stripe's standard session_id parameter
+    // Check for payment cancelled
+    if (urlParams.get('payment_cancelled') === 'true') {
+      return { success: false };
+    }
+
+    // Also check for Stripe's standard session_id parameter (fallback)
     const sessionId = urlParams.get('session_id');
     if (sessionId) {
-      // In a real implementation, you'd call Stripe's API to get session details
-      // For now, we'll just indicate success
       return { success: true };
     }
 

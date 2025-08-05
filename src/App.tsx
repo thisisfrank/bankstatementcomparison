@@ -2588,9 +2588,20 @@ function App() {
     checkAuthStatus();
   }, []);
 
-  // Check for payment success URL
+  // Check for payment success/cancellation URL
   useEffect(() => {
-    const handlePaymentSuccess = async () => {
+    const handlePaymentResult = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      
+      // Handle payment cancellation
+      if (urlParams.get('payment_cancelled') === 'true') {
+        console.log('Payment cancelled');
+        stripeService.clearPaymentParams();
+        // Optionally show a message or redirect to pricing page
+        return;
+      }
+      
+      // Handle payment success
       const paymentResult = stripeService.checkPaymentSuccess();
       if (paymentResult.success) {
         console.log('Payment success detected:', paymentResult);
@@ -2605,15 +2616,15 @@ function App() {
           setUserTier(user.tier);
           
           // Show success message
-          alert(`Payment successful! Your account has been upgraded to ${user.tier} with ${user.credits} credits.`);
+          alert(`🎉 Payment successful! Your account has been upgraded to ${user.tier} with ${user.credits} credits.`);
         } else {
           // Show success message for anonymous payment
-          alert('Payment successful! Please sign in or create an account to access your upgraded features.');
+          alert('🎉 Payment successful! Please sign in or create an account to access your upgraded features.');
         }
       }
     };
 
-    handlePaymentSuccess();
+    handlePaymentResult();
   }, []);
 
   const parser = new BankStatementParser();
