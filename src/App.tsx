@@ -3070,7 +3070,7 @@ function App() {
         </div>
 
         {/* Generate Comparison Button */}
-        {bothFilesUploaded && (
+        {bothFilesUploaded && !comparisonGenerated && (
           <div className="text-center mb-8">
             <button
               onClick={generateComparison}

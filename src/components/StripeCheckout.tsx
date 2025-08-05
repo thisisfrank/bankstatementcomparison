@@ -1,5 +1,6 @@
 import React from 'react';
 import { CreditCard, Loader2 } from 'lucide-react';
+import { StripeService } from '../lib/stripeService';
 
 interface StripeCheckoutProps {
   isVisible: boolean;
@@ -7,12 +8,6 @@ interface StripeCheckoutProps {
   isDark: boolean;
   selectedTier: 'starter' | 'pro' | 'business';
 }
-
-const STRIPE_CHECKOUT_URLS = {
-  starter: 'https://buy.stripe.com/test_dRmdRbcurfW97JAdhBgUM00',
-  pro: 'https://buy.stripe.com/test_28EaEZ7a7fW9aVM0uPgUM01',
-  business: 'https://buy.stripe.com/test_eVq8wR66325j3tk4L5gUM02'
-};
 
 const TIER_INFO = {
   starter: {
@@ -42,12 +37,11 @@ export function StripeCheckout({ isVisible, onClose, isDark, selectedTier }: Str
     setIsRedirecting(true);
     
     try {
-      // Redirect to the appropriate Stripe checkout URL
-      const checkoutUrl = STRIPE_CHECKOUT_URLS[selectedTier];
-      window.location.href = checkoutUrl;
+      // Create dynamic checkout session
+      await StripeService.createCheckoutSession(selectedTier, 'current-user-id');
     } catch (error) {
-      console.error('Error redirecting to checkout:', error);
-      alert('Failed to redirect to checkout. Please try again.');
+      console.error('Error creating checkout session:', error);
+      alert('Failed to create checkout session. Please try again.');
       setIsRedirecting(false);
     }
   };
