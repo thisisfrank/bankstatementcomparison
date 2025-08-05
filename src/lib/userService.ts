@@ -169,20 +169,20 @@ export class UserService {
 
   // Get current user profile
   async getCurrentUser(): Promise<Profile | null> {
-    // Always check auth status first to ensure we have fresh data
-    const { data: { user } } = await supabase.auth.getUser()
+    // Check for valid session instead of cached user data
+    const { data: { session } } = await supabase.auth.getSession()
     
-    if (user) {
+    if (session?.user) {
       // If we have a cached user with the same ID, return it
-      if (this.currentUser && this.currentUser.id === user.id) {
+      if (this.currentUser && this.currentUser.id === session.user.id) {
         return this.currentUser
       }
       // Otherwise load fresh profile
-      await this.loadUserProfile(user.id)
+      await this.loadUserProfile(session.user.id)
       return this.currentUser
     }
 
-    // No authenticated user, clear any cached data
+    // No valid session, clear any cached data
     this.currentUser = null
     return null
   }
@@ -190,14 +190,14 @@ export class UserService {
   // Debug function to check authentication status
   async debugAuthStatus(): Promise<{ isAuthenticated: boolean; userId?: string; error?: string }> {
     try {
-      const { data: { user }, error } = await supabase.auth.getUser()
+      const { data: { session }, error } = await supabase.auth.getSession()
       
       if (error) {
         return { isAuthenticated: false, error: error.message }
       }
       
-      if (user) {
-        return { isAuthenticated: true, userId: user.id }
+      if (session?.user) {
+        return { isAuthenticated: true, userId: session.user.id }
       }
       
       return { isAuthenticated: false }

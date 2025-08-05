@@ -2546,11 +2546,11 @@ function App() {
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
-        // First check if user is authenticated with Supabase directly
-        const { data: { user: authUser } } = await supabase.auth.getUser();
+        // Check for valid session instead of cached user data
+        const { data: { session } } = await supabase.auth.getSession();
         
-        if (authUser) {
-          // User is authenticated, set state immediately
+        if (session?.user) {
+          // Valid session exists, user is authenticated
           setIsAuthenticated(true);
           setIsSignedIn(true);
           
@@ -2563,6 +2563,7 @@ function App() {
             setUserTier('signup'); // Fallback tier
           }
         } else {
+          // No valid session, user is not authenticated
           setIsAuthenticated(false);
           setIsSignedIn(false);
           setUserTier(undefined);
