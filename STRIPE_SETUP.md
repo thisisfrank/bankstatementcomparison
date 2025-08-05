@@ -1,139 +1,98 @@
 # Stripe Integration Setup
 
-This guide explains how to set up the Stripe integration for the bank statement comparison app.
+This document outlines the Stripe payment integration for the Bank Statement Comparison app.
 
 ## Overview
 
-The app now uses Stripe's hosted checkout pages for handling payments. When users upgrade their tier, they are redirected to Stripe's checkout page, and upon successful payment, their credits are updated via webhooks.
+The app uses Stripe's hosted checkout pages with webhook notifications to handle subscription upgrades. Here's the flow:
 
-## Stripe Checkout URLs
-
-The following checkout URLs are configured for each tier:
-
-- **Starter**: https://buy.stripe.com/test_dRmdRbcurfW97JAdhBgUM00
-- **Pro**: https://buy.stripe.com/test_28EaEZ7a7fW9aVM0uPgUM01  
-- **Business**: https://buy.stripe.com/test_eVq8wR66325j3tk4L5gUM02
-
-## Webhook Setup
-
-### 1. Deploy the Webhook Handler
-
-The `webhook-handler.js` file contains a serverless function that handles Stripe webhook events. You can deploy this to:
-
-- **Vercel**: Create a `api/webhook.js` file with the handler code
-- **Netlify**: Create a `functions/webhook.js` file with the handler code
-- **AWS Lambda**: Use the handler code as a Lambda function
-
-### 2. Configure Stripe Webhooks
-
-In your Stripe Dashboard:
-
-1. Go to **Developers > Webhooks**
-2. Click **Add endpoint**
-3. Set the endpoint URL to your deployed webhook handler (e.g., `https://your-domain.com/api/webhook`)
-4. Select the following events to listen for:
-   - `checkout.session.completed`
-   - `invoice.payment_succeeded`
-   - `customer.subscription.created`
-   - `customer.subscription.updated`
-5. Save the webhook endpoint
-
-### 3. Update Environment Variables
-
-In your webhook handler, update the Supabase configuration:
-
-```javascript
-const supabaseUrl = 'YOUR_SUPABASE_URL';
-const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
+```
+User clicks "Upgrade" → Redirects to Stripe Checkout → User pays → Stripe sends webhook → User tier updated in Supabase
 ```
 
-## How It Works
+## Stripe Configuration
 
-### 1. User Flow
+### 1. Checkout URLs
+The app uses the following Stripe checkout URLs provided by the user:
 
-1. User clicks "Upgrade" on a paid plan
-2. User is redirected to the appropriate Stripe checkout URL
-3. User completes payment on Stripe's hosted page
-4. Stripe sends a webhook to your server
-5. Webhook handler updates the user's tier and credits in Supabase
-6. User returns to the app with updated credits
+- **Starter Plan**: `https://buy.stripe.com/test_dRmdRbcurfW97JAdhBgUM00`
+- **Pro Plan**: `https://buy.stripe.com/test_28EaEZ7a7fW9aVM0uPgUM01`  
+- **Business Plan**: `https://buy.stripe.com/test_eVq8wR66325j3tk4L5gUM02`
 
-### 2. Webhook Processing
+### 2. Environment Variables
+Add these to your Netlify environment variables:
 
-The webhook handler processes these events:
+```env
+# Required for webhook handler
+STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 
-- **`checkout.session.completed`**: Updates user tier and credits immediately after payment
-- **`invoice.payment_succeeded`**: Refreshes credits on recurring payments
-- **`customer.subscription.created`**: Logs new subscription creation
-- **`customer.subscription.updated`**: Updates user tier if subscription changes
+# Already configured
+VITE_SUPABASE_URL=your_supabase_url_here
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+```
 
-### 3. Credit Updates
+### 3. Webhook Endpoint
+The webhook handler is deployed as a Netlify function at:
+```
+https://your-app.netlify.app/.netlify/functions/stripe-webhook
+```
 
-When a payment is successful, the webhook handler:
-
-1. Extracts user ID and tier from the webhook data
-2. Calculates the appropriate credit amount for the tier
-3. Updates the user's profile in Supabase
-4. Logs the credit acquisition in the usage_logs table
-
-## Tier Configuration
-
-The credit amounts for each tier are:
-
-- **Starter**: 150 credits/month ($29)
-- **Pro**: 400 credits/month ($69)  
-- **Business**: 1000 credits/month ($149)
+Configure this URL in your Stripe dashboard as a webhook endpoint for the `checkout.session.completed` event.
 
 ## Testing
 
-### 1. Test Mode
-
-The current checkout URLs use Stripe's test mode. For production:
-
-1. Create new checkout sessions in your Stripe Dashboard
-2. Update the URLs in `src/components/StripeCheckout.tsx`
-3. Use live mode webhook endpoints
-
-### 2. Webhook Testing
-
-You can test webhooks using Stripe CLI:
-
-```bash
-stripe listen --forward-to localhost:3000/api/webhook
-```
-
-### 3. Test Payments
-
+### Test Cards
 Use Stripe's test card numbers:
-- **Success**: 4242 4242 4242 4242
-- **Decline**: 4000 0000 0000 0002
+- **Success**: `4242 4242 4242 4242`
+- **Requires authentication**: `4000 0025 0000 3155`
+- **Declined**: `4000 0000 0000 0002`
 
-## Security Considerations
+### Test Flow
+1. Click "Upgrade" on any paid plan
+2. Complete payment with test card `4242 4242 4242 4242`
+3. You'll be redirected back to the app
+4. Your account should be upgraded with the appropriate credits
 
-1. **Webhook Signature Verification**: Implement signature verification in production
-2. **Environment Variables**: Store sensitive keys securely
-3. **Error Handling**: Implement proper error handling and logging
-4. **Idempotency**: Ensure webhook handlers are idempotent
+## Implementation Details
 
-## Troubleshooting
+### Frontend (`stripeService.ts`)
+- Maps plan names to Stripe checkout URLs
+- Handles redirect to Stripe checkout
+- Detects payment success on return
+- Clears URL parameters after processing
 
-### Common Issues
+### Backend (`api/stripe-webhook.js`)
+- Netlify function that handles Stripe webhooks
+- Processes `checkout.session.completed` events
+- Updates user tier and credits in Supabase
+- Logs credit purchases for tracking
 
-1. **Webhook not received**: Check endpoint URL and event selection
-2. **User credits not updated**: Verify Supabase connection and user ID
-3. **Checkout redirect fails**: Ensure checkout URLs are correct
+### User Flow Integration
+- Pricing page redirects to Stripe checkout
+- Settings page has upgrade functionality
+- Paywall modal redirects to pricing page
+- Payment success is detected and user data refreshed
 
-### Debugging
+## Plan Mapping
 
-1. Check webhook logs in your deployment platform
-2. Monitor Stripe Dashboard for webhook delivery status
-3. Verify Supabase database updates
-4. Check browser console for frontend errors
+| Plan | Price | Credits | Stripe URL |
+|------|-------|---------|------------|
+| Starter | $29/month | 150 pages | `...dRmdRbcurfW97JAdhBgUM00` |
+| Pro | $69/month | 400 pages | `...28EaEZ7a7fW9aVM0uPgUM01` |
+| Business | $149/month | 1,000 pages | `...eVq8wR66325j3tk4L5gUM02` |
 
-## Next Steps
+## Deployment Notes
 
-1. Deploy the webhook handler to your preferred platform
-2. Configure Stripe webhooks in the dashboard
-3. Test the complete payment flow
-4. Switch to live mode for production
-5. Monitor webhook delivery and error rates 
+1. The webhook function will be automatically deployed with your Netlify site
+2. Make sure to configure the webhook URL in your Stripe dashboard
+3. Set all required environment variables in Netlify
+4. Test the complete flow in Stripe's test mode first
+
+## Security
+
+- Webhook signature verification should be enabled in production
+- Use Supabase service role key only on server-side (webhook handler)
+- Never expose Stripe secret keys in frontend code
+- All checkout URLs are hosted by Stripe (secure by default)

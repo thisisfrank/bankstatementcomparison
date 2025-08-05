@@ -1,0 +1,12 @@
+[build]
+  functions = "api"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[functions]
+  # Configure function timeout (default is 10 seconds, Stripe webhooks might need more)
+  [functions."stripe-webhook"]
+    timeout = 30

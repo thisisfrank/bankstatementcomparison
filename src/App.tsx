@@ -1,15 +1,15 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { loadStripe } from '@stripe/stripe-js';
+
 import { userService } from './lib/userService';
 import { Profile, TIER_CONFIG } from './lib/supabase';
 import { supabase } from './lib/supabase';
-import { PaymentSuccess } from './components/PaymentSuccess';
+import { stripeService, StripePlanId } from './lib/stripeService';
 
 
-// Stripe Configuration
-const stripePromise = loadStripe('pk_test_51RrpatRD0ogceRR4A7KSSLRWPStkofC0wJ7dcOIuP1zJjL4wLccu9bu1bxSP1XnVunRP36quFSNi86ylTH8r9vU600dIEPIsdM');
+
+
 
 // API Configuration
 const API_KEY = import.meta.env.VITE_PDF_PARSER_API_KEY || 'api-AB7psQuumDdjVHLTPYMDghH2xUgaKcuJZVvwReMMsxM9iQBaYJg/BrelRUX07neH';
@@ -1293,11 +1293,11 @@ function PaywallModal({ isOpen, onClose, onPayment, totalCategories, isDark }: {
             }`}
           >
             <CreditCard className="h-5 w-5" />
-            Pay with Stripe
+            Upgrade Now
           </button>
           
           <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-            Secure payment powered by Stripe. Your data is processed locally and never stored.
+            Secure payment processing powered by Stripe. Your data is processed locally and never stored.
           </p>
         </div>
       </div>
@@ -1313,11 +1313,7 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
 }) {
   if (!isVisible) return null;
 
-  const STRIPE_CHECKOUT_URLS = {
-    starter: 'https://buy.stripe.com/test_dRmdRbcurfW97JAdhBgUM00',
-    pro: 'https://buy.stripe.com/test_28EaEZ7a7fW9aVM0uPgUM01',
-    business: 'https://buy.stripe.com/test_eVq8wR66325j3tk4L5gUM02'
-  };
+
 
   const handleCheckout = async (planName: string) => {
     if (planName === 'Anonymous') {
@@ -1333,20 +1329,19 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
       return;
     }
 
-    // For paid plans, redirect directly to Stripe checkout
-    if (planName === 'Starter') {
-      window.location.href = STRIPE_CHECKOUT_URLS.starter;
-      return;
-    }
-    
-    if (planName === 'Pro') {
-      window.location.href = STRIPE_CHECKOUT_URLS.pro;
-      return;
-    }
-    
-    if (planName === 'Business') {
-      window.location.href = STRIPE_CHECKOUT_URLS.business;
-      return;
+    // For paid plans, redirect to Stripe checkout
+    const planId = planName.toLowerCase() as StripePlanId;
+    if (planId === 'starter' || planId === 'pro' || planId === 'business') {
+      try {
+        // Get current user to pass their ID if they're authenticated
+        const user = await userService.getCurrentUser();
+        await stripeService.redirectToCheckout(planId, user?.id);
+      } catch (error) {
+        console.error('Error redirecting to checkout:', error);
+        alert('Error starting checkout process. Please try again.');
+      }
+    } else {
+      console.log(`Unknown plan: ${planName}`);
     }
   };
 
@@ -1504,7 +1499,7 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
   if (!isVisible) return null;
 
   const handleManageSubscription = () => {
-    window.open('https://billing.stripe.com/p/login/test_dRmdRbcurfW97JAdhBgUM00', '_blank');
+    console.log('Manage subscription clicked - no action taken (Stripe removed)');
   };
 
   const handleUpgrade = () => {
@@ -2577,7 +2572,7 @@ function App() {
 
   const [comparisonGenerated, setComparisonGenerated] = useState(false);
   const [isGeneratingComparison, setIsGeneratingComparison] = useState(false);
-  const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
+
 
   // Check authentication status on component mount
   useEffect(() => {
@@ -2595,16 +2590,30 @@ function App() {
 
   // Check for payment success URL
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('session_id');
-    
-    console.log('URL params:', window.location.search);
-    console.log('Session ID found:', sessionId);
-    
-    if (sessionId) {
-      console.log('Setting showPaymentSuccess to true');
-      setShowPaymentSuccess(true);
-    }
+    const handlePaymentSuccess = async () => {
+      const paymentResult = stripeService.checkPaymentSuccess();
+      if (paymentResult.success) {
+        console.log('Payment success detected:', paymentResult);
+        
+        // Clear payment parameters from URL
+        stripeService.clearPaymentParams();
+        
+        // Refresh user data to get updated tier/credits
+        const user = await userService.getCurrentUser();
+        if (user) {
+          setIsAuthenticated(true);
+          setUserTier(user.tier);
+          
+          // Show success message
+          alert(`Payment successful! Your account has been upgraded to ${user.tier} with ${user.credits} credits.`);
+        } else {
+          // Show success message for anonymous payment
+          alert('Payment successful! Please sign in or create an account to access your upgraded features.');
+        }
+      }
+    };
+
+    handlePaymentSuccess();
   }, []);
 
   const parser = new BankStatementParser();
@@ -2758,15 +2767,16 @@ function App() {
   };
 
   const handlePayment = async () => {
-    const stripe = await stripePromise;
-    if (!stripe) return;
-
-    // In a real app, you'd create a checkout session on your backend
-    // For demo purposes, we'll just simulate payment success
-    setTimeout(() => {
-      setIsPaid(true);
+    try {
+      // Close the paywall modal first
       setShowPaywall(false);
-    }, 1000);
+      
+      // Redirect to pricing page where user can select a plan
+      setShowPricingModal(true);
+    } catch (error) {
+      console.error('Error handling payment:', error);
+      alert('Error starting payment process. Please try again.');
+    }
   };
 
   const exportToPDF = () => {
@@ -3662,15 +3672,7 @@ function App() {
         />
       )}
 
-      <PaymentSuccess
-        isVisible={showPaymentSuccess}
-        onClose={() => {
-          setShowPaymentSuccess(false);
-          // Clear the URL parameters
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }}
-        isDark={isDarkMode}
-      />
+
       
     </>
   );
