@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, X } from 'lucide-react';
+import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, Eye, Target, TrendingDown, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 import { userService } from './lib/userService';
@@ -44,10 +44,10 @@ interface ParsedStatement {
 
 interface ComparisonResult {
   category: string;
-  statement1: number;
-  statement2: number;
-  difference: number;
-  winner: string;
+  statementValues: number[]; // Array of values for each statement
+  differences: number[]; // Differences from average
+  minIndex: number; // Index of statement with minimum value
+  maxIndex: number; // Index of statement with maximum value
 }
 
 const categories = [
@@ -360,7 +360,7 @@ function DarkModeToggle({ isDark, onToggle }: { isDark: boolean; onToggle: () =>
       className={`
         fixed top-6 right-6 z-50 p-3 rounded-full transition-all duration-300 hover:scale-110
         ${isDark 
-          ? 'bg-gray-800 text-yellow-400 hover:bg-gray-700 shadow-lg shadow-gray-900/50' 
+          ? 'bg-black border-2 border-white text-white hover:bg-gray-900 shadow-lg' 
           : 'bg-white text-gray-600 hover:bg-gray-50 shadow-lg shadow-gray-200/50'
         }
       `}
@@ -372,6 +372,174 @@ function DarkModeToggle({ isDark, onToggle }: { isDark: boolean; onToggle: () =>
         <Moon className="h-5 w-5 transition-transform duration-300" />
       )}
     </button>
+  );
+}
+
+function MultiFileUploadZone({
+  files,
+  parsedData,
+  onFilesUpload,
+  onRemoveFile,
+  onStatementNameChange,
+  maxFiles,
+  isDark,
+  isGenerating
+}: {
+  files: File[];
+  parsedData: ParsedStatement[];
+  onFilesUpload: (files: File[]) => void;
+  onRemoveFile: (index: number) => void;
+  onStatementNameChange: (index: number, name: string) => void;
+  maxFiles: number;
+  isDark: boolean;
+  isGenerating: boolean;
+}) {
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useCallback<HTMLInputElement | null>(null, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    onFilesUpload(droppedFiles);
+  }, [onFilesUpload]);
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+      onFilesUpload(selectedFiles);
+    }
+  }, [onFilesUpload]);
+
+  const canAddMore = files.length < maxFiles;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="text-center">
+        <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+          Upload Bank Statements
+        </h3>
+      </div>
+
+      {/* Upload zone */}
+      {canAddMore && (
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`
+            relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200
+            ${isDragOver 
+              ? isDark ? 'border-white bg-black' : 'border-green-500 bg-green-50'
+              : isDark ? 'border-white hover:border-white bg-black' : 'border-gray-300 hover:border-gray-400 bg-white'
+            }
+          `}
+        >
+          <input
+            type="file"
+            accept=".pdf"
+            multiple
+            onChange={handleFileSelect}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            disabled={isGenerating}
+          />
+          
+          <div className="space-y-3">
+            <Upload className={`mx-auto h-12 w-12 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+            <div>
+              <p className={`text-lg font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                Drop PDFs here or click to browse
+              </p>
+              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                (Wells Fargo, Chase, Bank of America supported)
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Uploaded files list */}
+      {files.length > 0 && (
+        <div className="space-y-3">
+          {files.map((file, index) => (
+            <div
+              key={index}
+              className={`p-4 rounded-xl border transition-all ${
+                isDark 
+                  ? 'bg-black border-white hover:border-white' 
+                  : 'bg-white border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-1">
+                  <CheckCircle className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={parsedData[index]?.accountHolder || file.name}
+                        onChange={(e) => onStatementNameChange(index, e.target.value)}
+                        className={`text-sm font-medium bg-transparent border-b border-transparent hover:border-current focus:border-current outline-none transition-colors ${
+                          isDark ? 'text-gray-200' : 'text-gray-800'
+                        }`}
+                        placeholder="Statement name"
+                      />
+                    </div>
+                    <p className={`text-xs truncate ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                      {file.name}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => onRemoveFile(index)}
+                  disabled={isGenerating}
+                  className={`p-2 rounded-lg transition-colors ${
+                    isGenerating
+                      ? 'opacity-50 cursor-not-allowed'
+                      : isDark 
+                        ? 'hover:bg-red-900/30 text-red-400' 
+                        : 'hover:bg-red-100 text-red-600'
+                  }`}
+                  title="Remove file"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* File limit badge at bottom with hover tooltip */}
+      <div className="flex justify-center">
+        <div className="relative group">
+          <div className={`text-sm px-3 py-1 rounded-full cursor-pointer transition-all ${
+            isDark ? 'bg-black border-2 border-white text-white' : 'bg-black border-2 border-white text-white'
+          }`}>
+            {files.length}/{maxFiles} files
+          </div>
+          {maxFiles === 2 && (
+            <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 rounded-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${
+              isDark ? 'bg-black border-2 border-white text-white' : 'bg-white border-2 border-black text-black'
+            }`}>
+              Upgrade to paid plan for up to 4 files!
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -458,15 +626,15 @@ function FileUploadZone({
           relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200
           ${isDragOver 
             ? isDark 
-              ? 'border-blue-400 bg-blue-900/20' 
-              : 'border-blue-500 bg-blue-50'
+              ? 'border-white bg-black' 
+              : 'border-green-500 bg-green-50'
             : isDark
-              ? 'border-gray-600 hover:border-gray-500 bg-gray-800/50'
+              ? 'border-white hover:border-white bg-black'
               : 'border-gray-300 hover:border-gray-400 bg-white'
           }
           ${uploadedFile 
             ? isDark 
-              ? 'border-green-400 bg-green-900/20' 
+              ? 'border-white bg-black' 
               : 'border-green-500 bg-green-50'
             : ''
           }
@@ -483,8 +651,8 @@ function FileUploadZone({
         <div className="space-y-3">
           {isUploading ? (
             <>
-              <Loader2 className={`mx-auto h-12 w-12 animate-spin ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
-              <p className={`font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Uploading PDF...</p>
+              <Loader2 className={`mx-auto h-12 w-12 animate-spin ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+              <p className={`font-medium ${isDark ? 'text-green-400' : 'text-green-600'}`}>Uploading PDF...</p>
             </>
           ) : uploadedFile ? (
             <>
@@ -543,14 +711,14 @@ function CategorySelector({
   comparisonData,
   parsedData,
   isDark,
-  editableStatementNames
+  statementNames
 }: {
   selectedCategories: string[];
   onCategoryChange: (categoryIds: string[]) => void;
   comparisonData: { [key: string]: ComparisonResult } | null;
-  parsedData: { statement1: ParsedStatement | null; statement2: ParsedStatement | null };
+  parsedData: ParsedStatement[];
   isDark: boolean;
-  editableStatementNames: { statement1: string; statement2: string };
+  statementNames: string[];
 }) {
   const handleCategoryToggle = (categoryId: string) => {
     if (selectedCategories.includes(categoryId)) {
@@ -580,10 +748,10 @@ function CategorySelector({
                 relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 hover:scale-105
                 ${isSelected 
                   ? isDark
-                    ? 'border-blue-400 bg-blue-900/30 shadow-lg shadow-blue-900/20'
-                    : 'border-blue-500 bg-blue-50 shadow-lg'
+                    ? 'border-green-400 bg-green-900/30 shadow-lg shadow-blue-900/20'
+                    : 'border-green-500 bg-green-50 shadow-lg'
                   : isDark
-                    ? 'border-gray-600 hover:border-gray-500 bg-gray-800/50'
+                    ? 'border-white hover:border-white bg-black'
                     : 'border-gray-200 hover:border-gray-300 bg-white'
                 }
               `}
@@ -612,8 +780,8 @@ function CategorySelector({
               {isSelected && (
                 <CheckCircle className={`absolute -top-2 -right-2 h-6 w-6 rounded-full ${
                   isDark 
-                    ? 'text-blue-400 bg-gray-800' 
-                    : 'text-blue-600 bg-white'
+                    ? 'text-white bg-black border-2 border-white' 
+                    : 'text-green-600 bg-white'
                 }`} />
               )}
             </div>
@@ -630,12 +798,10 @@ function CategorySelector({
           
           {selectedCategories.map((categoryId) => {
             const category = categories.find(c => c.id === categoryId);
-            const statement1Transactions = parsedData.statement1?.transactions.filter(t => t.category === categoryId) || [];
-            const statement2Transactions = parsedData.statement2?.transactions.filter(t => t.category === categoryId) || [];
             
             return (
               <div key={categoryId} className={`rounded-lg border p-4 ${
-                isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
               }`}>
                 <h5 className={`font-medium mb-3 flex items-center gap-2 ${
                   isDark ? 'text-gray-200' : 'text-gray-800'
@@ -646,20 +812,23 @@ function CategorySelector({
                   >
                     {category && <category.icon className="h-4 w-4" style={{ color: category.color }} />}
                   </div>
-                  {category?.name} ({statement1Transactions.length + statement2Transactions.length} transactions)
+                  {category?.name} ({parsedData.reduce((sum, pd) => sum + (pd.transactions.filter(t => t.category === categoryId).length), 0)} transactions)
                 </h5>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Statement 1 Transactions */}
-                  <div>
+                <div className={`grid grid-cols-1 ${parsedData.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-2'} gap-4`}>
+                  {parsedData.map((statement, index) => {
+                    const stmtTransactions = statement.transactions.filter(t => t.category === categoryId);
+                    
+                    return (
+                      <div key={index}>
                     <h6 className={`text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                      {editableStatementNames.statement1}
+                          {statementNames[index] || `Statement ${index + 1}`}
                     </h6>
                     <div className="space-y-1 max-h-40 overflow-y-auto">
-                      {statement1Transactions.length > 0 ? (
-                        statement1Transactions.map((transaction) => (
+                          {stmtTransactions.length > 0 ? (
+                            stmtTransactions.map((transaction) => (
                           <div key={transaction.id} className={`text-xs p-2 rounded ${
-                            isDark ? 'bg-gray-700' : 'bg-gray-50'
+                            isDark ? 'bg-black border border-white' : 'bg-gray-50'
                           }`}>
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
@@ -687,44 +856,8 @@ function CategorySelector({
                       )}
                     </div>
                   </div>
-
-                  {/* Statement 2 Transactions */}
-                  <div>
-                    <h6 className={`text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                      {editableStatementNames.statement2}
-                    </h6>
-                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                      {statement2Transactions.length > 0 ? (
-                        statement2Transactions.map((transaction) => (
-                          <div key={transaction.id} className={`text-xs p-2 rounded ${
-                            isDark ? 'bg-gray-700' : 'bg-gray-50'
-                          }`}>
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <div className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                                  {transaction.description}
-                                </div>
-                                <div className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                  {transaction.date}
-                                </div>
-                              </div>
-                              <div className={`font-medium ml-2 ${
-                                transaction.type === 'withdrawal' 
-                                  ? isDark ? 'text-red-400' : 'text-red-600'
-                                  : isDark ? 'text-green-400' : 'text-green-600'
-                              }`}>
-                                {transaction.type === 'withdrawal' ? '-' : '+'}${transaction.amount.toFixed(2)}
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          No transactions in this category
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -737,156 +870,108 @@ function CategorySelector({
 
 function ComparisonResults({ 
   data, 
-  statement1Name, 
-  statement2Name, 
+  statementNames,
   isPreview = false,
   onUnlock,
   isDark
 }: {
   data: { [key: string]: ComparisonResult };
-  statement1Name: string;
-  statement2Name: string;
+  statementNames: string[];
   isPreview?: boolean;
   onUnlock?: () => void;
   isDark: boolean;
 }) {
-  const chartData = Object.entries(data).map(([categoryId, result], index) => {
-    const category = categories.find(c => c.id === categoryId);
-    return {
-      category: category?.name || categoryId,
-      categoryNumber: index + 1,
-      [statement1Name]: result.statement1,
-      [statement2Name]: result.statement2,
-      color: category?.color || '#8884d8'
-    };
-  });
-
-  const totalDifference = Object.values(data).reduce((sum, result) => sum + result.difference, 0);
   const previewData = isPreview ? Object.fromEntries(Object.entries(data).slice(0, 2)) : data;
 
   return (
     <div className="space-y-6">
       <div className={`rounded-xl p-6 shadow-lg border ${
         isDark 
-          ? 'bg-gray-800 border-gray-700' 
+          ? 'bg-black border-white' 
           : 'bg-white border-gray-100'
       }`}>
         <h3 className={`text-xl font-bold mb-4 flex items-center gap-2 ${
           isDark ? 'text-gray-200' : 'text-gray-800'
         }`}>
-          <BarChart3 className={`h-6 w-6 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+          <BarChart3 className={`h-6 w-6 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
           Spending Comparison Results
         </h3>
 
-        {chartData.length > 0 && !isPreview && (
-          <div className="mb-6">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e5e7eb'} />
-                  <XAxis 
-                    dataKey="categoryNumber" 
-                    tick={{ fill: isDark ? '#d1d5db' : '#374151' }}
-                    axisLine={{ stroke: isDark ? '#6b7280' : '#9ca3af' }}
-                  />
-                  <YAxis 
-                    tick={{ fill: isDark ? '#d1d5db' : '#374151' }}
-                    axisLine={{ stroke: isDark ? '#6b7280' : '#9ca3af' }}
-                  />
-                  <Tooltip 
-                  formatter={(value: any, name: any) => {
-                    if (name === statement1Name) {
-                      return [`$${value.toFixed(2)}`, statement1Name];
-                    } else if (name === statement2Name) {
-                      return [`$${value.toFixed(2)}`, statement2Name];
-                    }
-                    return [`$${value.toFixed(2)}`, name];
-                  }}
-                  labelFormatter={(label: any) => {
-                    const dataPoint = chartData.find(item => item.categoryNumber === label);
-                    return dataPoint ? dataPoint.category : label;
-                  }}
-                />
-                  <Bar dataKey={statement1Name} fill="#3B82F6" />
-                  <Bar dataKey={statement2Name} fill="#10B981" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            
-            {/* Legend */}
-            <div className="flex items-center justify-center gap-6 mt-4">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded" style={{ backgroundColor: '#3B82F6' }}></div>
-                <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  {statement1Name}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded" style={{ backgroundColor: '#10B981' }}></div>
-                <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  {statement2Name}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-3">
-          {Object.entries(previewData).map(([categoryId, result], index) => {
+        {/* Comparison Matrix/Grid */}
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className={`border-b-2 ${isDark ? 'border-white' : 'border-gray-300'}`}>
+                <th className={`text-left py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Category
+                </th>
+                {statementNames.map((name, index) => (
+                  <th key={index} className={`text-right py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {name || `Statement ${index + 1}`}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(previewData).map(([categoryId, result]) => {
             const category = categories.find(c => c.id === categoryId);
             const Icon = category?.icon || BarChart3;
             
             return (
-              <div key={categoryId} className={`flex items-center justify-between p-4 rounded-lg ${
-                isDark ? 'bg-gray-700/50' : 'bg-gray-50'
-              }`}>
+                  <tr key={categoryId} className={`border-b ${isDark ? 'border-white' : 'border-gray-200'}`}>
+                    <td className="py-3 px-4">
                 <div className="flex items-center gap-3">
                   <div 
                     className="p-2 rounded-full"
                     style={{ backgroundColor: category?.color + '20' }}
                   >
                     <Icon 
-                      className="h-5 w-5" 
+                            className="h-4 w-4" 
                       style={{ color: category?.color }}
                     />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-sm font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      #{index + 1}
-                    </span>
                     <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                       {category?.name}
                     </span>
                   </div>
-                </div>
-                
-                <div className="text-right">
-                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    <span className={`font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                      ${result.statement1.toFixed(2)}
+                    </td>
+                    {result.statementValues.map((value, index) => {
+                      const isMin = index === result.minIndex && result.statementValues.length > 1 && Math.max(...result.statementValues) > 0;
+                      const isMax = index === result.maxIndex && result.statementValues.length > 1 && Math.max(...result.statementValues) > 0;
+                      
+                      return (
+                        <td key={index} className="py-3 px-4 text-right">
+                          <span className={`font-semibold ${
+                            isMin 
+                              ? isDark ? 'text-green-400' : 'text-green-600'
+                              : isMax 
+                                ? isDark ? 'text-red-400' : 'text-red-600'
+                                : isDark ? 'text-gray-300' : 'text-gray-700'
+                          }`}>
+                            ${value.toFixed(2)}
                     </span>
-                    {' vs '}
-                    <span className={`font-medium ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                      ${result.statement2.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                    ${result.difference.toFixed(2)} difference
-                  </div>
-                  <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                    {categoryId === 'income' || categoryId === 'refunds' ? 'Income' : 'Spending'}
-                  </div>
-                </div>
-              </div>
+                        </td>
             );
           })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Legend */}
+        <div className={`mt-4 p-3 rounded-lg ${isDark ? 'bg-black border border-white' : 'bg-gray-100'}`}>
+          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            <span className={isDark ? 'text-green-400 font-semibold' : 'text-green-600 font-semibold'}>Green</span> = Lowest spending in category • <span className={isDark ? 'text-red-400 font-semibold' : 'text-red-600 font-semibold'}>Red</span> = Highest spending in category
+          </p>
         </div>
 
         {isPreview && Object.keys(data).length > 2 && (
           <div className={`mt-6 p-6 rounded-lg border ${
             isDark 
-              ? 'bg-gradient-to-r from-blue-900/20 to-indigo-900/20 border-blue-700/50' 
-              : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+              ? 'bg-gradient-to-r from-green-900/20 to-emerald-900/20 border-green-700/50' 
+              : 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
           }`}>
             <div className="text-center">
               <div className={`text-lg font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -899,8 +984,8 @@ function ComparisonResults({
                 onClick={onUnlock}
                 className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium ${
                   isDark 
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    ? 'bg-green-600 hover:bg-green-700 text-white' 
+                    : 'bg-green-600 hover:bg-green-700 text-white'
                 }`}
               >
                 <CreditCard className="h-5 w-5" />
@@ -986,17 +1071,17 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
       isDark 
-        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
+        ? 'bg-black' 
         : 'bg-gradient-to-br from-blue-50 via-white to-green-50'
     }`}>
       {/* Navigation Header */}
       <div className={`sticky top-0 z-40 backdrop-blur-sm border-b ${
-        isDark ? 'bg-gray-900/80 border-gray-700' : 'bg-white/80 border-gray-200'
+        isDark ? 'bg-black/90 border-white' : 'bg-white/80 border-gray-200'
       }`}>
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className={`p-2 rounded-lg ${isDark ? 'bg-blue-600' : 'bg-blue-600'}`}>
+              <div className="p-2 rounded-lg bg-black border-2 border-white">
                 <Users className="h-5 w-5 text-white" />
               </div>
               <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -1006,11 +1091,7 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
             
             <button 
               onClick={onBack}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                isDark 
-                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                  : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
-              }`}
+              className="px-4 py-2 rounded-lg font-medium transition-colors bg-black border-2 border-white text-white hover:bg-gray-900"
             >
               ← Back
             </button>
@@ -1020,14 +1101,14 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
       
       <div className="container mx-auto px-4 py-8 max-w-md">
         <div className={`rounded-xl border shadow-lg p-8 ${
-          isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
         }`}>
           
           <div className="text-center mb-6">
             <div className={`p-3 rounded-full w-16 h-16 mx-auto flex items-center justify-center mb-4 ${
-              isDark ? 'bg-blue-900/30' : 'bg-blue-100'
+              isDark ? 'bg-green-900/30' : 'bg-green-100'
             }`}>
-              <Users className={`h-8 w-8 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+              <Users className={`h-8 w-8 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
             </div>
             
             <h3 className={`text-xl font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -1082,10 +1163,10 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
           {/* Divider */}
           <div className="relative mb-4">
             <div className="absolute inset-0 flex items-center">
-              <div className={`w-full border-t ${isDark ? 'border-gray-600' : 'border-gray-300'}`} />
+              <div className={`w-full border-t ${isDark ? 'border-white' : 'border-gray-300'}`} />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className={`px-2 ${isDark ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-500'}`}>
+              <span className={`px-2 ${isDark ? 'bg-black text-gray-300' : 'bg-white text-gray-500'}`}>
                 Or
               </span>
             </div>
@@ -1097,7 +1178,7 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
               onClick={() => setShowEmailForm(true)}
               className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-200 border ${
                 isDark 
-                  ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
+                  ? 'bg-transparent text-white border-white hover:bg-black' 
                   : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -1116,7 +1197,7 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
                     onChange={(e) => setFullName(e.target.value)}
                     className={`w-full px-3 py-2 rounded-lg border ${
                       isDark 
-                        ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                        ? 'bg-black border-white text-white' 
                         : 'bg-white border-gray-300 text-gray-900'
                     }`}
                     placeholder="Enter your full name"
@@ -1134,7 +1215,7 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
                   onChange={(e) => setEmail(e.target.value)}
                   className={`w-full px-3 py-2 rounded-lg border ${
                     isDark 
-                      ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                      ? 'bg-black border-white text-white' 
                       : 'bg-white border-gray-300 text-gray-900'
                   }`}
                   placeholder="Enter your email"
@@ -1151,7 +1232,7 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
                   onChange={(e) => setPassword(e.target.value)}
                   className={`w-full px-3 py-2 rounded-lg border ${
                     isDark 
-                      ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                      ? 'bg-black border-white text-white' 
                       : 'bg-white border-gray-300 text-gray-900'
                   }`}
                   placeholder="Enter your password"
@@ -1167,8 +1248,8 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
                       ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
                       : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     : isDark 
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      ? 'bg-green-600 hover:bg-green-700 text-white' 
+                      : 'bg-green-600 hover:bg-green-700 text-white'
                 }`}
               >
                 {isLoading ? (
@@ -1191,7 +1272,7 @@ function AuthPage({ isVisible, onBack, isDark, onSignIn }: {
                 setError('');
               }}
               className={`text-sm transition-colors ${
-                isDark ? 'text-gray-400 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
+                isDark ? 'text-gray-400 hover:text-green-400' : 'text-gray-600 hover:text-green-600'
               }`}
             >
               {isSignUp 
@@ -1224,7 +1305,7 @@ function PaywallModal({ isOpen, onClose, onPayment, totalCategories, isDark }: {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className={`rounded-xl max-w-md w-full p-6 relative ${
-        isDark ? 'bg-gray-800' : 'bg-white'
+        isDark ? 'bg-black border-2 border-white' : 'bg-white'
       }`}>
         <button
           onClick={onClose}
@@ -1237,9 +1318,9 @@ function PaywallModal({ isOpen, onClose, onPayment, totalCategories, isDark }: {
         
         <div className="text-center space-y-4">
           <div className={`p-3 rounded-full w-16 h-16 mx-auto flex items-center justify-center ${
-            isDark ? 'bg-blue-900/30' : 'bg-blue-100'
+            isDark ? 'bg-green-900/30' : 'bg-green-100'
           }`}>
-            <BarChart3 className={`h-8 w-8 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+            <BarChart3 className={`h-8 w-8 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
           </div>
           
           <h3 className={`text-xl font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -1247,7 +1328,7 @@ function PaywallModal({ isOpen, onClose, onPayment, totalCategories, isDark }: {
           </h3>
           
           <div className={`text-left space-y-2 p-4 rounded-lg ${
-            isDark ? 'bg-gray-700/50' : 'bg-gray-50'
+            isDark ? 'bg-black border border-white' : 'bg-gray-50'
           }`}>
             <div className="flex items-center gap-2">
               <CheckCircle className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
@@ -1288,8 +1369,8 @@ function PaywallModal({ isOpen, onClose, onPayment, totalCategories, isDark }: {
             onClick={onPayment}
             className={`w-full py-3 rounded-lg transition-colors font-medium flex items-center justify-center gap-2 ${
               isDark 
-                ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                ? 'bg-green-600 hover:bg-green-700 text-white' 
+                : 'bg-green-600 hover:bg-green-700 text-white'
             }`}
           >
             <CreditCard className="h-5 w-5" />
@@ -1368,36 +1449,38 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
       description: 'Perfect for individuals',
       priceId: 'price_1Rrpe8RD0ogceRR4LdVUllat'
     },
-    {
-      name: 'Pro',
-      price: '$69/month',
-      pages: '400 pages per month',
-      description: 'Great for small teams',
-      priceId: 'price_1RrrwQRD0ogceRR4BEdntV12'
-    },
-    {
-      name: 'Business',
-      price: '$149/month',
-      pages: '1,000 pages per month',
-      description: 'Enterprise solution',
-      priceId: 'price_1RrrwQRD0ogceRR41ZscbkhJ'
-    }
+    // Hidden for now - Pro tier
+    // {
+    //   name: 'Pro',
+    //   price: '$69/month',
+    //   pages: '400 pages per month',
+    //   description: 'Great for small teams',
+    //   priceId: 'price_1RrrwQRD0ogceRR4BEdntV12'
+    // },
+    // Hidden for now - Business tier
+    // {
+    //   name: 'Business',
+    //   price: '$149/month',
+    //   pages: '1,000 pages per month',
+    //   description: 'Enterprise solution',
+    //   priceId: 'price_1RrrwQRD0ogceRR41ZscbkhJ'
+    // }
   ];
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
       isDark 
-        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
+        ? 'bg-black' 
         : 'bg-gradient-to-br from-blue-50 via-white to-green-50'
     }`}>
       {/* Navigation Header */}
       <div className={`sticky top-0 z-40 backdrop-blur-sm border-b ${
-        isDark ? 'bg-gray-900/80 border-gray-700' : 'bg-white/80 border-gray-200'
+        isDark ? 'bg-black/90 border-white' : 'bg-white/80 border-gray-200'
       }`}>
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className={`p-2 rounded-lg ${isDark ? 'bg-blue-600' : 'bg-blue-600'}`}>
+              <div className="p-2 rounded-lg bg-black border-2 border-white">
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
               <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -1407,11 +1490,7 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
             
             <button 
               onClick={onBack}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                isDark 
-                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                  : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
-              }`}
+              className="px-4 py-2 rounded-lg font-medium transition-colors bg-black border-2 border-white text-white hover:bg-gray-900"
             >
               ← Back
             </button>
@@ -1419,11 +1498,11 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
         </div>
       </div>
       
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
         <div className="space-y-8">
           <div className="text-center">
             <h1 className={`text-4xl md:text-5xl font-bold mb-4 ${
-              isDark ? 'text-gray-100' : 'text-gray-800'
+              isDark ? 'text-white' : 'text-gray-800'
             }`}>
               Simple Pricing
             </h1>
@@ -1432,19 +1511,19 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {plans.map((plan, index) => (
-              <div key={plan.name} className={`p-6 rounded-xl border shadow-lg ${
-                isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-              } ${plan.isAnonymous ? 'border-blue-500' : ''}`}>
-                <div className="text-center mb-6">
-                  <h3 className={`text-xl font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+              <div key={plan.name} className={`p-4 rounded-xl border shadow-lg ${
+                isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
+              } ${plan.isAnonymous ? 'border-green-500' : ''}`}>
+                <div className="text-center mb-4">
+                  <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                     {plan.name}
                   </h3>
-                  <div className={`text-3xl font-bold mt-3 ${
+                  <div className={`text-2xl font-bold mt-2 ${
                     plan.isAnonymous 
-                      ? isDark ? 'text-blue-400' : 'text-blue-600'
-                      : isDark ? 'text-blue-400' : 'text-blue-600'
+                      ? isDark ? 'text-green-400' : 'text-green-600'
+                      : isDark ? 'text-green-400' : 'text-green-600'
                   }`}>
                     {plan.price}
                   </div>
@@ -1460,18 +1539,18 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
                 
                 <button
                   onClick={() => handleCheckout(plan.name)}
-                  className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-200 ${
+                  className={`w-full py-2 px-3 rounded-lg font-medium transition-all duration-200 ${
                     plan.isAnonymous
                       ? isDark
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
-                        : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
+                        ? 'bg-green-600 hover:bg-green-700 text-white hover:scale-105'
+                        : 'bg-green-600 hover:bg-green-700 text-white hover:scale-105'
                       : plan.name === 'Free'
                       ? isDark
                         ? 'bg-gray-600 hover:bg-gray-500 text-gray-200'
                         : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
                       : isDark
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
-                        : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
+                        ? 'bg-green-600 hover:bg-green-700 text-white hover:scale-105'
+                        : 'bg-green-600 hover:bg-green-700 text-white hover:scale-105'
                   }`}
                 >
                   {plan.isAnonymous ? 'Try Now' : plan.name === 'Sign Up' ? 'Sign Up' : 'Subscribe'}
@@ -1513,17 +1592,17 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
       isDark 
-        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
+        ? 'bg-black' 
         : 'bg-gradient-to-br from-blue-50 via-white to-green-50'
     }`}>
       {/* Navigation Header */}
       <div className={`sticky top-0 z-40 backdrop-blur-sm border-b ${
-        isDark ? 'bg-gray-900/80 border-gray-700' : 'bg-white/80 border-gray-200'
+        isDark ? 'bg-black/90 border-white' : 'bg-white/80 border-gray-200'
       }`}>
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className={`p-2 rounded-lg ${isDark ? 'bg-blue-600' : 'bg-blue-600'}`}>
+              <div className="p-2 rounded-lg bg-black border-2 border-white">
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
               <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -1533,11 +1612,7 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
             
             <button 
               onClick={onBack}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                isDark 
-                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                  : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
-              }`}
+              className="px-4 py-2 rounded-lg font-medium transition-colors bg-black border-2 border-white text-white hover:bg-gray-900"
             >
               ← Back
             </button>
@@ -1547,7 +1622,7 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
       
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className={`rounded-xl border shadow-lg p-8 ${
-          isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
         }`}>
           <div className="text-center mb-8">
             <h1 className={`text-3xl font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -1555,42 +1630,34 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
             </h1>
           </div>
           
-          <div className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Dark Mode Toggle */}
-            <div className={`p-6 rounded-lg border ${
-              isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
+            <div className={`p-6 rounded-lg border flex flex-col text-center ${
+              isDark ? 'bg-black border-white' : 'bg-gray-50 border-gray-200'
             }`}>
-              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+              <h3 className={`text-lg font-semibold mb-4 flex items-center justify-center gap-2 ${
                 isDark ? 'text-gray-200' : 'text-gray-800'
               }`}>
                 {isDark ? (
-                  <Moon className={`h-5 w-5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                  <Moon className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
                 ) : (
-                  <Sun className={`h-5 w-5 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
+                  <Sun className={`h-5 w-5 ${isDark ? 'text-yellow-400' : 'text-green-600'}`} />
                 )}
-                Appearance
+                Dark Mode
               </h3>
               
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                    Dark Mode
-                  </div>
-                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Switch between light and dark themes
-                  </div>
-                </div>
+              <div className="flex-grow flex items-center justify-center">
                 <button
                   onClick={onToggleDarkMode}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
                     isDark 
-                      ? 'bg-blue-600' 
+                      ? 'bg-green-600' 
                       : 'bg-gray-200'
                   }`}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      isDark ? 'translate-x-6' : 'translate-x-1'
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                      isDark ? 'translate-x-7' : 'translate-x-1'
                     }`}
                   />
                 </button>
@@ -1598,35 +1665,35 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
             </div>
 
             {/* Subscription Management */}
-            <div className={`p-6 rounded-lg border ${
-              isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
+            <div className={`p-6 rounded-lg border flex flex-col text-center ${
+              isDark ? 'bg-black border-white' : 'bg-gray-50 border-gray-200'
             }`}>
-              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+              <h3 className={`text-lg font-semibold mb-4 flex items-center justify-center gap-2 ${
                 isDark ? 'text-gray-200' : 'text-gray-800'
               }`}>
-                <CreditCard className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                <CreditCard className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
                 {isAuthenticated && userTier && userTier !== 'anonymous' && userTier !== 'signup' ? 'Subscription' : 'Upgrade'}
               </h3>
               
-              <div className="flex justify-center">
+              <div className="flex-grow flex items-center justify-center">
                 {isAuthenticated && userTier && userTier !== 'anonymous' && userTier !== 'signup' ? (
                   <button
                     onClick={handleManageSubscription}
-                    className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 border ${
+                    className={`px-6 py-2 rounded-lg font-medium transition-all duration-200 border ${
                       isDark 
-                        ? 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600' 
+                        ? 'bg-black text-white border-white hover:bg-gray-900' 
                         : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
                     }`}
                   >
-                    Manage Subscription
+                    Manage
                   </button>
                 ) : (
                   <button
                     onClick={handleUpgrade}
-                    className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                    className={`px-6 py-2 rounded-lg font-medium transition-all duration-200 ${
                       isDark 
-                        ? 'bg-purple-600 text-white hover:bg-purple-700' 
-                        : 'bg-purple-600 text-white hover:bg-purple-700'
+                        ? 'bg-green-600 text-white hover:bg-green-700' 
+                        : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
                   >
                     Upgrade
@@ -1636,44 +1703,31 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
             </div>
             
             {/* Share App */}
-            <div className={`p-6 rounded-lg border ${
-              isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
+            <div className={`p-6 rounded-lg border flex flex-col text-center ${
+              isDark ? 'bg-black border-white' : 'bg-gray-50 border-gray-200'
             }`}>
-              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+              <h3 className={`text-lg font-semibold mb-4 flex items-center justify-center gap-2 ${
                 isDark ? 'text-gray-200' : 'text-gray-800'
               }`}>
                 <Users className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
                 Share App
               </h3>
-              <div className="flex items-center justify-center gap-3">
-                <input
-                  type="text"
-                  value={window.location.origin}
-                  readOnly
-                  className={`px-4 py-2 rounded-lg border text-sm ${
-                    isDark 
-                      ? 'bg-gray-700 border-gray-600 text-gray-200' 
-                      : 'bg-gray-50 border-gray-300 text-gray-700'
-                  }`}
-                  style={{ width: '300px' }}
-                />
+              <div className="flex-grow flex items-center justify-center">
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(window.location.origin);
                     alert('Link copied to clipboard!');
                   }}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                  className={`px-6 py-2 rounded-lg font-medium transition-all duration-200 ${
                     isDark 
-                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                      ? 'bg-green-600 text-white hover:bg-green-700' 
+                      : 'bg-green-600 text-white hover:bg-green-700'
                   }`}
                 >
                   Copy Link
                 </button>
               </div>
             </div>
-
-
           </div>
         </div>
       </div>
@@ -1774,17 +1828,17 @@ function UsagePage({ isVisible, onBack, isDark }: {
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
       isDark 
-        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
+        ? 'bg-black' 
         : 'bg-gradient-to-br from-blue-50 via-white to-green-50'
     }`}>
       {/* Navigation Header */}
       <div className={`sticky top-0 z-40 backdrop-blur-sm border-b ${
-        isDark ? 'bg-gray-900/80 border-gray-700' : 'bg-white/80 border-gray-200'
+        isDark ? 'bg-black/90 border-white' : 'bg-white/80 border-gray-200'
       }`}>
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className={`p-2 rounded-lg ${isDark ? 'bg-blue-600' : 'bg-blue-600'}`}>
+              <div className="p-2 rounded-lg bg-black border-2 border-white">
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
               <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -1794,11 +1848,7 @@ function UsagePage({ isVisible, onBack, isDark }: {
             
             <button 
               onClick={onBack}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                isDark 
-                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                  : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
-              }`}
+              className="px-4 py-2 rounded-lg font-medium transition-colors bg-black border-2 border-white text-white hover:bg-gray-900"
             >
               ← Back
             </button>
@@ -1808,7 +1858,7 @@ function UsagePage({ isVisible, onBack, isDark }: {
       
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className={`rounded-xl border shadow-lg p-8 ${
-          isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
         }`}>
           <div className="mb-8">
             <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -1819,7 +1869,7 @@ function UsagePage({ isVisible, onBack, isDark }: {
           
           {/* Credits Section */}
           <div className={`p-6 rounded-lg border mb-8 ${
-            isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
+            isDark ? 'bg-black border-white' : 'bg-gray-50 border-gray-200'
           }`}>
             <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
               isDark ? 'text-gray-200' : 'text-gray-800'
@@ -1830,7 +1880,7 @@ function UsagePage({ isVisible, onBack, isDark }: {
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div className="text-center">
-                <div className={`text-2xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-black'}`}>
                   {creditsRemaining}
                 </div>
                 <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -1838,7 +1888,7 @@ function UsagePage({ isVisible, onBack, isDark }: {
                 </div>
               </div>
               <div className="text-center">
-                <div className={`text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-black'}`}>
                   {creditsUsed}
                 </div>
                 <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -1846,7 +1896,7 @@ function UsagePage({ isVisible, onBack, isDark }: {
                 </div>
               </div>
               <div className="text-center">
-                <div className={`text-2xl font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-black'}`}>
                   {totalCredits}
                 </div>
                 <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -2031,17 +2081,17 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
       isDark 
-        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
+        ? 'bg-black' 
         : 'bg-gradient-to-br from-blue-50 via-white to-green-50'
     }`}>
       {/* Navigation Header */}
       <div className={`sticky top-0 z-40 backdrop-blur-sm border-b ${
-        isDark ? 'bg-gray-900/80 border-gray-700' : 'bg-white/80 border-gray-200'
+        isDark ? 'bg-black/90 border-white' : 'bg-white/80 border-gray-200'
       }`}>
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className={`p-2 rounded-lg ${isDark ? 'bg-blue-600' : 'bg-blue-600'}`}>
+              <div className="p-2 rounded-lg bg-black border-2 border-white">
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
               <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
@@ -2051,11 +2101,7 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
             
             <button 
               onClick={onBack}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                isDark 
-                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                  : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
-              }`}
+              className="px-4 py-2 rounded-lg font-medium transition-colors bg-black border-2 border-white text-white hover:bg-gray-900"
             >
               ← Back
             </button>
@@ -2083,7 +2129,7 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
             {pastDocuments.length > 0 ? (
               pastDocuments.map((doc) => (
                 <div key={doc.id} className={`rounded-xl border shadow-lg p-6 ${
-                  isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                  isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
                 }`}>
                   <div className="flex items-start justify-between mb-4">
                     <div>
@@ -2099,7 +2145,7 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     <div className={`p-4 rounded-lg ${
-                      isDark ? 'bg-gray-700/50' : 'bg-gray-50'
+                      isDark ? 'bg-black border border-white' : 'bg-gray-50'
                     }`}>
                       <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                         {doc.statement1Name}
@@ -2120,7 +2166,7 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
                       </div>
                     </div>
                     <div className={`p-4 rounded-lg ${
-                      isDark ? 'bg-gray-700/50' : 'bg-gray-50'
+                      isDark ? 'bg-black border border-white' : 'bg-gray-50'
                     }`}>
                       <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                         {doc.statement2Name}
@@ -2147,8 +2193,8 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
                       onClick={() => handleDownloadPDF(doc.id)}
                       className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${
                         isDark 
-                          ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105' 
-                          : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
+                          ? 'bg-green-600 text-white hover:bg-green-700 hover:scale-105' 
+                          : 'bg-green-600 text-white hover:bg-green-700 hover:scale-105'
                       }`}
                     >
                       <Download className="h-4 w-4" />
@@ -2158,7 +2204,7 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
                       onClick={() => handleDownloadCSV(doc.id)}
                       className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 border ${
                         isDark 
-                          ? 'bg-transparent text-gray-300 border-gray-600 hover:bg-gray-700' 
+                          ? 'bg-transparent text-white border-white hover:bg-black' 
                           : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
                       }`}
                     >
@@ -2233,13 +2279,13 @@ function TransactionEditor({
 
   return (
     <div className={`rounded-xl p-6 shadow-lg border ${
-      isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
+      isDark ? 'bg-black border-white' : 'bg-white border-gray-100'
     }`}>
       <div className="flex items-center justify-between mb-6">
         <h3 className={`text-xl font-bold flex items-center gap-2 ${
           isDark ? 'text-gray-200' : 'text-gray-800'
         }`}>
-          <FileText className={`h-6 w-6 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+          <FileText className={`h-6 w-6 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
           Review & Edit Transactions - {statementTitle}
         </h3>
         <div className="flex gap-2">
@@ -2259,7 +2305,7 @@ function TransactionEditor({
       <div className="space-y-3 max-h-96 overflow-y-auto">
         {editingTransactions.map((transaction) => (
           <div key={transaction.id} className={`p-4 rounded-lg border ${
-            isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
+            isDark ? 'bg-black border-white' : 'bg-gray-50 border-gray-200'
           }`}>
             {editingId === transaction.id ? (
               <TransactionEditForm
@@ -2314,7 +2360,7 @@ function TransactionEditor({
           onClick={onCancel}
           className={`px-6 py-2 rounded-lg font-medium transition-colors ${
             isDark 
-              ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
+              ? 'bg-black border-2 border-white hover:bg-gray-900 text-white' 
               : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
           }`}
         >
@@ -2324,8 +2370,8 @@ function TransactionEditor({
           onClick={handleSaveAll}
           className={`px-6 py-2 rounded-lg font-medium transition-colors ${
             isDark 
-              ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
+              ? 'bg-green-600 hover:bg-green-700 text-white' 
+              : 'bg-green-600 hover:bg-green-700 text-white'
           }`}
         >
           Save Changes
@@ -2374,7 +2420,7 @@ function TransactionEditForm({
             onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
             className={`w-full px-3 py-2 rounded-lg border ${
               isDark 
-                ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                ? 'bg-black border-white text-white' 
                 : 'bg-white border-gray-300 text-gray-900'
             }`}
             placeholder="MM/DD"
@@ -2391,7 +2437,7 @@ function TransactionEditForm({
             onChange={(e) => setFormData(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
             className={`w-full px-3 py-2 rounded-lg border ${
               isDark 
-                ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                ? 'bg-black border-white text-white' 
                 : 'bg-white border-gray-300 text-gray-900'
             }`}
             placeholder="0.00"
@@ -2409,7 +2455,7 @@ function TransactionEditForm({
           onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
           className={`w-full px-3 py-2 rounded-lg border ${
             isDark 
-              ? 'bg-gray-700 border-gray-600 text-gray-200' 
+              ? 'bg-black border-white text-white' 
               : 'bg-white border-gray-300 text-gray-900'
           }`}
           placeholder="Transaction description"
@@ -2426,7 +2472,7 @@ function TransactionEditForm({
             onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
             className={`w-full px-3 py-2 rounded-lg border ${
               isDark 
-                ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                ? 'bg-black border-white text-white' 
                 : 'bg-white border-gray-300 text-gray-900'
             }`}
           >
@@ -2446,7 +2492,7 @@ function TransactionEditForm({
             onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as 'withdrawal' | 'deposit' }))}
             className={`w-full px-3 py-2 rounded-lg border ${
               isDark 
-                ? 'bg-gray-700 border-gray-600 text-gray-200' 
+                ? 'bg-black border-white text-white' 
                 : 'bg-white border-gray-300 text-gray-900'
             }`}
           >
@@ -2476,7 +2522,7 @@ function TransactionEditForm({
           onClick={onCancel}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             isDark 
-              ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
+              ? 'bg-black border-2 border-white hover:bg-gray-900 text-white' 
               : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
           }`}
         >
@@ -2486,8 +2532,8 @@ function TransactionEditForm({
           type="submit"
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             isDark 
-              ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
+              ? 'bg-green-600 hover:bg-green-700 text-white' 
+              : 'bg-green-600 hover:bg-green-700 text-white'
           }`}
         >
           Save
@@ -2502,44 +2548,30 @@ function TransactionEditForm({
 
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [files, setFiles] = useState<{ statement1: File | null; statement2: File | null }>({
-    statement1: null,
-    statement2: null
-  });
-  
-  const [parsedData, setParsedData] = useState<{ statement1: ParsedStatement | null; statement2: ParsedStatement | null }>({
-    statement1: null,
-    statement2: null
-  });
-  
-  const [uploading, setUploading] = useState<{ statement1: boolean; statement2: boolean }>({
-    statement1: false,
-    statement2: false
-  });
+  const [files, setFiles] = useState<File[]>([]);
+  const [parsedData, setParsedData] = useState<ParsedStatement[]>([]);
+  const [uploading, setUploading] = useState<boolean[]>([]);
+  const [statementNames, setStatementNames] = useState<string[]>([]);
   
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [comparisonResults, setComparisonResults] = useState<{ [key: string]: ComparisonResult } | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
-  const [showTransactionEditor, setShowTransactionEditor] = useState<{ statement1: boolean; statement2: boolean }>({
-    statement1: false,
-    statement2: false
-  });
-  const [editableStatementNames, setEditableStatementNames] = useState<{ statement1: string; statement2: string }>({
-    statement1: 'Statement 1',
-    statement2: 'Statement 2'
-  });
+  const [showTransactionEditor, setShowTransactionEditor] = useState<number>(-1); // Index of statement being edited, -1 for none
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [showSettingsPage, setShowSettingsPage] = useState(false);
   const [showUsagePage, setShowUsagePage] = useState(false);
   const [showPastDocumentsPage, setShowPastDocumentsPage] = useState(false);
   const [showAuthPage, setShowAuthPage] = useState(false);
-  const [isSignedIn, setIsSignedIn] = useState(false); // Simulate signed in state
+  const [isSignedIn, setIsSignedIn] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userTier, setUserTier] = useState<string | undefined>(undefined);
 
   const [comparisonGenerated, setComparisonGenerated] = useState(false);
   const [isGeneratingComparison, setIsGeneratingComparison] = useState(false);
+
+  // Calculate max files based on tier
+  const maxFiles = userTier && ['starter', 'pro', 'business'].includes(userTier) ? 4 : 2;
 
 
   // Check authentication status and listen for changes
@@ -2662,43 +2694,70 @@ function App() {
 
   const parser = new BankStatementParser();
 
-  const handleFileUpload = async (statementKey: 'statement1' | 'statement2', file: File) => {
-    setFiles(prev => ({ ...prev, [statementKey]: file }));
-    setUploading(prev => ({ ...prev, [statementKey]: true }));
+  const handleFilesUpload = async (newFiles: File[]) => {
+    // Validate file count
+    if (files.length + newFiles.length > maxFiles) {
+      alert(`You can only upload up to ${maxFiles} files. ${maxFiles === 2 ? 'Upgrade to a paid plan for up to 4 files!' : ''}`);
+      return;
+    }
+
+    // Filter for PDF files only
+    const pdfFiles = newFiles.filter(file => file.type === 'application/pdf');
+    if (pdfFiles.length === 0) {
+      alert('Please upload PDF files only.');
+      return;
+    }
+
+    // Add files to state
+    setFiles(prev => [...prev, ...pdfFiles]);
+    setUploading(prev => [...prev, ...pdfFiles.map(() => false)]);
+    setStatementNames(prev => [
+      ...prev,
+      ...pdfFiles.map((file, index) => `Statement ${prev.length + index + 1}`)
+    ]);
     setComparisonGenerated(false);
     setComparisonResults(null);
-    
-    // Show upload successful with a brief loading animation
-    setTimeout(() => {
-      setUploading(prev => ({ ...prev, [statementKey]: false }));
-      // Show a brief success message
-      alert(`${file.name} uploaded successfully! Ready for comparison.`);
-    }, 1500);
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+    setParsedData(prev => prev.filter((_, i) => i !== index));
+    setUploading(prev => prev.filter((_, i) => i !== index));
+    setStatementNames(prev => prev.filter((_, i) => i !== index));
+    setComparisonGenerated(false);
+    setComparisonResults(null);
+  };
+
+  const handleStatementNameChange = (index: number, newName: string) => {
+    setStatementNames(prev => {
+      const updated = [...prev];
+      updated[index] = newName;
+      return updated;
+    });
   };
 
   const generateComparison = async () => {
-    if (!files.statement1 || !files.statement2) {
-      alert('Please upload both statements first.');
+    if (files.length < 2) {
+      alert('Please upload at least 2 statements for comparison.');
       return;
     }
 
     setIsGeneratingComparison(true);
-    setUploading({ statement1: true, statement2: true });
+    setUploading(files.map(() => true));
     
     try {
-      // Process both files through API
-      const [result1, result2] = await Promise.all([
-        parser.parsePDF(files.statement1),
-        parser.parsePDF(files.statement2)
-      ]);
+      // Process all files through API concurrently
+      const results = await Promise.all(
+        files.map(file => parser.parsePDF(file))
+      );
       
-      setParsedData({ statement1: result1, statement2: result2 });
+      setParsedData(results);
       
-      // Calculate total pages processed from both statements
-      // Get actual page count from PDF files
-      const pages1 = await parser.getPDFPageCount(files.statement1);
-      const pages2 = await parser.getPDFPageCount(files.statement2);
-      const totalPages = pages1 + pages2;
+      // Calculate total pages processed from all statements
+      const pageCounts = await Promise.all(
+        files.map(file => parser.getPDFPageCount(file))
+      );
+      const totalPages = pageCounts.reduce((sum, count) => sum + count, 0);
       
       // Check tier limits before allowing comparison
       const tierCheck = await userService.canPerformAction('comparison', totalPages);
@@ -2710,44 +2769,40 @@ function App() {
 
       // Mark anonymous usage if user is not signed in
 
-
-      // Generate comparison for ALL categories (not just selected ones)
+      // Generate comparison matrix for ALL categories
       const comparison: { [key: string]: ComparisonResult } = {};
       
       categories.forEach(category => {
         const categoryId = category.id;
-        
-        // Calculate withdrawals for each statement
-        const withdrawals1 = result1.withdrawals
-          .filter(t => t.category === categoryId)
-          .reduce((sum, t) => sum + t.amount, 0);
-          
-        const withdrawals2 = result2.withdrawals
-          .filter(t => t.category === categoryId)
-          .reduce((sum, t) => sum + t.amount, 0);
-        
-        // Calculate deposits for each statement
-        const deposits1 = result1.deposits
-          .filter(t => t.category === categoryId)
-          .reduce((sum, t) => sum + t.amount, 0);
-          
-        const deposits2 = result2.deposits
-          .filter(t => t.category === categoryId)
-          .reduce((sum, t) => sum + t.amount, 0);
-        
-        // For spending categories, focus on withdrawals (money going out)
-        // For income categories, focus on deposits (money coming in)
         const isIncomeCategory = categoryId === 'income';
         
-        const amount1 = isIncomeCategory ? deposits1 : withdrawals1;
-        const amount2 = isIncomeCategory ? deposits2 : withdrawals2;
+        // Calculate values for each statement
+        const statementValues = results.map(result => {
+          const withdrawals = result.withdrawals
+          .filter(t => t.category === categoryId)
+          .reduce((sum, t) => sum + t.amount, 0);
+          
+          const deposits = result.deposits
+          .filter(t => t.category === categoryId)
+          .reduce((sum, t) => sum + t.amount, 0);
+        
+          return isIncomeCategory ? deposits : withdrawals;
+        });
+        
+        // Find min and max indices
+        const minIndex = statementValues.indexOf(Math.min(...statementValues));
+        const maxIndex = statementValues.indexOf(Math.max(...statementValues));
+        
+        // Calculate differences from average
+        const average = statementValues.reduce((sum, val) => sum + val, 0) / statementValues.length;
+        const differences = statementValues.map(val => val - average);
         
         comparison[categoryId] = {
           category: categoryId,
-          statement1: amount1,
-          statement2: amount2,
-          difference: Math.abs(amount1 - amount2),
-          winner: amount1 > amount2 ? 'Statement 2' : 'Statement 1'
+          statementValues,
+          differences,
+          minIndex,
+          maxIndex
         };
       });
       
@@ -2763,23 +2818,23 @@ function App() {
         const sessionId = userService.getSessionId();
         
         // Calculate totals for the comparison
-        const totalWithdrawals = result1.totalWithdrawals + result2.totalWithdrawals;
-        const totalDeposits = result1.totalDeposits + result2.totalDeposits;
+        const totalWithdrawals = results.reduce((sum, r) => sum + r.totalWithdrawals, 0);
+        const totalDeposits = results.reduce((sum, r) => sum + r.totalDeposits, 0);
         
         // Save to comparisons table
         const saveData = {
           user_id: user?.id || null,
           session_id: user ? null : sessionId,
-          statement1_name: editableStatementNames.statement1,
-          statement2_name: editableStatementNames.statement2,
+          statement1_name: statementNames[0] || 'Statement 1',
+          statement2_name: statementNames[1] || 'Statement 2',
           categories: Object.keys(comparison),
           results: comparison,
           total_withdrawals: totalWithdrawals,
           total_deposits: totalDeposits,
-          statement1_withdrawals: result1.totalWithdrawals,
-          statement1_deposits: result1.totalDeposits,
-          statement2_withdrawals: result2.totalWithdrawals,
-          statement2_deposits: result2.totalDeposits,
+          statement1_withdrawals: results[0]?.totalWithdrawals || 0,
+          statement1_deposits: results[0]?.totalDeposits || 0,
+          statement2_withdrawals: results[1]?.totalWithdrawals || 0,
+          statement2_deposits: results[1]?.totalDeposits || 0,
           status: 'completed'
         };
         
@@ -2805,7 +2860,7 @@ function App() {
       console.error('Error processing PDFs:', error);
       alert('Error processing PDFs. Please try again.');
     } finally {
-      setUploading({ statement1: false, statement2: false });
+      setUploading(files.map(() => false));
       setIsGeneratingComparison(false);
     }
   };
@@ -2854,18 +2909,17 @@ function App() {
           
           <div class="summary">
             <h2>Summary</h2>
+            ${parsedData.map((data, index) => {
+              const net = (data.totalDeposits || 0) - (data.totalWithdrawals || 0);
+              return `
             <div class="statement">
-              <h3>${editableStatementNames.statement1}</h3>
-              <p>Total Withdrawals: $${parsedData.statement1?.totalWithdrawals.toFixed(2) || '0.00'}</p>
-              <p>Total Deposits: $${parsedData.statement1?.totalDeposits.toFixed(2) || '0.00'}</p>
-              <p>Net: $${((parsedData.statement1?.totalDeposits || 0) - (parsedData.statement1?.totalWithdrawals || 0)).toFixed(2)}</p>
+                  <h3>${statementNames[index] || `Statement ${index + 1}`}</h3>
+                  <p>Total Withdrawals: $${data.totalWithdrawals.toFixed(2)}</p>
+                  <p>Total Deposits: $${data.totalDeposits.toFixed(2)}</p>
+                  <p>Net: $${net.toFixed(2)}</p>
             </div>
-            <div class="statement">
-              <h3>${editableStatementNames.statement2}</h3>
-              <p>Total Withdrawals: $${parsedData.statement2?.totalWithdrawals.toFixed(2) || '0.00'}</p>
-              <p>Total Deposits: $${parsedData.statement2?.totalDeposits.toFixed(2) || '0.00'}</p>
-              <p>Net: $${((parsedData.statement2?.totalDeposits || 0) - (parsedData.statement2?.totalWithdrawals || 0)).toFixed(2)}</p>
-            </div>
+              `;
+            }).join('')}
           </div>
           
           <div class="comparison">
@@ -2875,15 +2929,11 @@ function App() {
               return `
                 <div class="category">
                   <h3>${category?.name || categoryId}</h3>
+                  ${result.statementValues.map((value, index) => `
                   <div class="statement">
-                    <span class="amount">${editableStatementNames.statement1}: $${result.statement1.toFixed(2)}</span>
+                      <span class="amount">${statementNames[index] || `Statement ${index + 1}`}: $${value.toFixed(2)}</span>
                   </div>
-                  <div class="statement">
-                    <span class="amount">${editableStatementNames.statement2}: $${result.statement2.toFixed(2)}</span>
-                  </div>
-                  <div class="difference">
-                    <strong>Difference: $${result.difference.toFixed(2)}</strong>
-                  </div>
+                  `).join('')}
                 </div>
               `;
             }).join('')}
@@ -2903,16 +2953,12 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                ${[
-                  ...(parsedData.statement1?.transactions || []).map(t => ({
+                ${parsedData.flatMap((data, index) => 
+                  data.transactions.map(t => ({
                     ...t,
-                    statement: editableStatementNames.statement1
-                  })),
-                  ...(parsedData.statement2?.transactions || []).map(t => ({
-                    ...t,
-                    statement: editableStatementNames.statement2
+                    statement: statementNames[index] || `Statement ${index + 1}`
                   }))
-                ].map(t => `
+                ).map(t => `
                   <tr>
                     <td>${t.statement}</td>
                     <td>${categories.find(c => c.id === t.category)?.name || t.category}</td>
@@ -2936,7 +2982,7 @@ function App() {
   };
 
   const exportToCSV = () => {
-    if (!comparisonResults || !parsedData.statement1 || !parsedData.statement2) {
+    if (!comparisonResults || parsedData.length === 0) {
       alert('No data to export');
       return;
     }
@@ -2944,17 +2990,13 @@ function App() {
     // Create CSV content
     let csvContent = 'Statement,Category,Description,Date,Amount,Type\n';
     
-    // Add transactions from both statements
-    const allTransactions = [
-      ...(parsedData.statement1.transactions || []).map(t => ({
+    // Add transactions from all statements
+    const allTransactions = parsedData.flatMap((data, index) => 
+      data.transactions.map(t => ({
         ...t,
-        statement: editableStatementNames.statement1
-      })),
-      ...(parsedData.statement2.transactions || []).map(t => ({
-        ...t,
-        statement: editableStatementNames.statement2
+        statement: statementNames[index] || `Statement ${index + 1}`
       }))
-    ];
+    );
 
     allTransactions.forEach(transaction => {
       const category = categories.find(c => c.id === transaction.category)?.name || transaction.category;
@@ -2971,15 +3013,14 @@ function App() {
 
     // Add comparison summary
     csvContent += '\nCategory Comparison\n';
-    csvContent += 'Category,Statement1,Statement2,Difference\n';
+    const headerRow = ['Category', ...statementNames.map((name, i) => name || `Statement ${i + 1}`)].join(',');
+    csvContent += headerRow + '\n';
     
     Object.entries(comparisonResults).forEach(([categoryId, result]) => {
       const category = categories.find(c => c.id === categoryId)?.name || categoryId;
       const row = [
         category,
-        result.statement1.toFixed(2),
-        result.statement2.toFixed(2),
-        result.difference.toFixed(2)
+        ...result.statementValues.map(v => v.toFixed(2))
       ].join(',');
       csvContent += row + '\n';
     });
@@ -2996,10 +3037,10 @@ function App() {
     document.body.removeChild(link);
   };
 
-  const handleTransactionEditorSave = (statementKey: 'statement1' | 'statement2', updatedTransactions: Transaction[]) => {
-    if (!parsedData[statementKey]) return;
+  const handleTransactionEditorSave = (index: number, updatedTransactions: Transaction[]) => {
+    if (!parsedData[index]) return;
     
-    const updatedParsedData = { ...parsedData[statementKey]! };
+    const updatedParsedData = { ...parsedData[index] };
     updatedParsedData.transactions = updatedTransactions;
     
     // Recalculate withdrawals and deposits
@@ -3011,35 +3052,39 @@ function App() {
     updatedParsedData.totalWithdrawals = withdrawals.reduce((sum, t) => sum + t.amount, 0);
     updatedParsedData.totalDeposits = deposits.reduce((sum, t) => sum + t.amount, 0);
     
-    setParsedData(prev => ({ ...prev, [statementKey]: updatedParsedData }));
-    setShowTransactionEditor(prev => ({ ...prev, [statementKey]: false }));
+    setParsedData(prev => {
+      const updated = [...prev];
+      updated[index] = updatedParsedData;
+      return updated;
+    });
+    setShowTransactionEditor(-1);
   };
 
   const resetComparison = () => {
-    setFiles({ statement1: null, statement2: null });
-    setParsedData({ statement1: null, statement2: null });
-    setUploading({ statement1: false, statement2: false });
+    setFiles([]);
+    setParsedData([]);
+    setUploading([]);
+    setStatementNames([]);
     setSelectedCategories([]);
     setComparisonResults(null);
     setComparisonGenerated(false);
-    setShowTransactionEditor({ statement1: false, statement2: false });
-    setEditableStatementNames({ statement1: 'Statement 1', statement2: 'Statement 2' });
+    setShowTransactionEditor(-1);
   };
 
-  const canGenerate = parsedData.statement1 && parsedData.statement2 && selectedCategories.length > 0 && !comparisonGenerated;
-  const bothFilesUploaded = files.statement1 && files.statement2;
+  const hasEnoughFiles = files.length >= 2;
+  const allFilesUploaded = files.length > 0;
 
   return (
     <>
       {!showAuthPage && !showPricingModal && !showSettingsPage && !showUsagePage && !showPastDocumentsPage ? (
         <div className={`min-h-screen transition-colors duration-300 ${
           isDarkMode 
-            ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
+            ? 'bg-black' 
             : 'bg-gradient-to-br from-blue-50 via-white to-green-50'
         }`}>
           {/* Navigation Header */}
           <div className={`sticky top-0 z-40 backdrop-blur-sm border-b ${
-            isDarkMode ? 'bg-gray-900/80 border-gray-700' : 'bg-white/80 border-gray-200'
+            isDarkMode ? 'bg-black/90 border-white' : 'bg-white/80 border-gray-200'
           }`}>
             <div className="container mx-auto px-4 py-4">
               <div className="flex items-center justify-between">
@@ -3051,7 +3096,7 @@ function App() {
                       setShowUsagePage(false);
                       setShowPastDocumentsPage(false);
                     }}
-                    className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                    className="p-2 rounded-lg transition-colors bg-black border-2 border-white hover:bg-gray-900"
                   >
                     <BarChart3 className="h-5 w-5 text-white" />
                   </button>
@@ -3063,7 +3108,7 @@ function App() {
                       {/* Anonymous usage indicator - will be updated dynamically */}
                       <div className={`text-xs px-2 py-1 rounded-full ${
                         isDarkMode 
-                          ? 'bg-green-900/30 text-green-400 border border-green-600' 
+                          ? 'bg-black text-white border-2 border-white' 
                           : 'bg-green-100 text-green-800 border border-green-300'
                       }`}>
                         Anonymous Tier
@@ -3072,7 +3117,7 @@ function App() {
                       <button 
                         onClick={() => setShowUsagePage(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
-                          isDarkMode ? 'text-gray-300 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
+                          isDarkMode ? 'text-white hover:text-gray-300' : 'text-gray-600 hover:text-green-600'
                         }`}
                       >
                         Usage
@@ -3080,7 +3125,7 @@ function App() {
                       <button 
                         onClick={() => setShowPricingModal(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
-                          isDarkMode ? 'text-gray-300 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
+                          isDarkMode ? 'text-white hover:text-gray-300' : 'text-gray-600 hover:text-green-600'
                         }`}
                       >
                         Pricing
@@ -3088,7 +3133,7 @@ function App() {
                       <button 
                         onClick={() => setShowSettingsPage(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
-                          isDarkMode ? 'text-gray-300 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
+                          isDarkMode ? 'text-white hover:text-gray-300' : 'text-gray-600 hover:text-green-600'
                         }`}
                       >
                         Settings
@@ -3096,11 +3141,7 @@ function App() {
 
                       <button 
                         onClick={() => setShowAuthPage(true)}
-                        className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                          isDarkMode 
-                            ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105' 
-                            : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
-                        }`}
+                        className="px-4 py-2 rounded-lg font-medium transition-all duration-200 bg-black border-2 border-white text-white hover:bg-gray-900 hover:scale-105"
                       >
                         Sign In
                       </button>
@@ -3110,7 +3151,7 @@ function App() {
                       <button 
                         onClick={() => setShowPastDocumentsPage(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
-                          isDarkMode ? 'text-gray-300 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
+                          isDarkMode ? 'text-white hover:text-gray-300' : 'text-gray-600 hover:text-green-600'
                         }`}
                       >
                         Past Documents
@@ -3118,7 +3159,7 @@ function App() {
                       <button 
                         onClick={() => setShowUsagePage(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
-                          isDarkMode ? 'text-gray-300 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
+                          isDarkMode ? 'text-white hover:text-gray-300' : 'text-gray-600 hover:text-green-600'
                         }`}
                       >
                         Usage
@@ -3126,7 +3167,7 @@ function App() {
                       <button 
                         onClick={() => setShowSettingsPage(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
-                          isDarkMode ? 'text-gray-300 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
+                          isDarkMode ? 'text-white hover:text-gray-300' : 'text-gray-600 hover:text-green-600'
                         }`}
                       >
                         Settings
@@ -3144,11 +3185,7 @@ function App() {
                             setUserTier(undefined);
                           }
                         }}
-                        className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                          isDarkMode 
-                            ? 'bg-gray-600 text-white hover:bg-gray-700 hover:scale-105' 
-                            : 'bg-gray-600 text-white hover:bg-gray-700 hover:scale-105'
-                        }`}
+                        className="px-4 py-2 rounded-lg font-medium transition-all duration-200 bg-black border-2 border-white text-white hover:bg-gray-900 hover:scale-105"
                       >
                         Sign Out
                       </button>
@@ -3162,24 +3199,65 @@ function App() {
           <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="flex items-center justify-center gap-4 mb-6">
-            <div className={`p-4 rounded-2xl shadow-lg ${isDarkMode ? 'bg-gradient-to-br from-blue-600 to-blue-700' : 'bg-gradient-to-br from-blue-600 to-blue-700'}`}>
-              <BarChart3 className="h-8 w-8 text-white" />
-            </div>
-            <h1 className={`text-4xl md:text-5xl font-bold bg-gradient-to-r ${
-              isDarkMode ? 'text-gray-100' : 'text-gray-800'
-            } leading-tight`}>
+          <div className="flex items-center justify-center mb-6">
+            <h1 className={`text-5xl md:text-6xl font-serif font-bold ${
+              isDarkMode ? 'text-white' : 'text-gray-800'
+            } leading-tight tracking-tight`}>
               Bank Statement Comparison
             </h1>
           </div>
           <div className={`max-w-3xl mx-auto space-y-3`}>
             <p className={`text-lg ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              isDarkMode ? 'text-gray-300' : 'text-gray-600'
             }`}>
-              Upload two bank statements and get instant spending comparisons by category.<br />
-              Perfect for co-parents, roommates, and couples splitting expenses. <br />
-              Or for keeping tabs of your month to month spending.
+              Upload multiple bank statements and get instant spending comparisons by category.<br />
+              Perfect for co-parents, roommates, couples, or month-to-month tracking.
             </p>
+          </div>
+
+          {/* Key Benefits */}
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+            <div className="text-center">
+              <div className={`p-3 rounded-full w-14 h-14 mx-auto mb-3 flex items-center justify-center ${
+                isDarkMode ? 'bg-black border-2 border-white' : 'bg-green-100'
+              }`}>
+                <Eye className={`h-7 w-7 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
+              </div>
+              <h3 className={`font-semibold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                See where your money really goes
+              </h3>
+              <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                No more guessing or manual spreadsheets
+              </p>
+            </div>
+            
+            <div className="text-center">
+              <div className={`p-3 rounded-full w-14 h-14 mx-auto mb-3 flex items-center justify-center ${
+                isDarkMode ? 'bg-black border-2 border-white' : 'bg-green-100'
+              }`}>
+                <CheckCircle className={`h-7 w-7 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
+              </div>
+              <h3 className={`font-semibold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                End money arguments instantly
+              </h3>
+              <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                Crystal-clear comparisons everyone can understand
+              </p>
+            </div>
+            
+            <div className="text-center">
+              <div className={`p-3 rounded-full w-14 h-14 mx-auto mb-3 flex items-center justify-center ${
+                isDarkMode ? 'bg-black border-2 border-white' : 'bg-green-100'
+              }`}>
+                <Target className={`h-7 w-7 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
+              </div>
+              <h3 className={`font-semibold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                Make better money decisions
+              </h3>
+              <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                Spot spending patterns you never noticed before
+              </p>
+            </div>
           </div>
         </div>
 
@@ -3190,33 +3268,69 @@ function App() {
         </div>
 
         {/* File Upload Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-          <FileUploadZone
-            onFileUpload={(file) => handleFileUpload('statement1', file)}
-            label="Statement 1"
-            isUploading={uploading.statement1}
-            uploadedFile={files.statement1}
-            parsedData={parsedData.statement1}
+        <div className="mb-8">
+          <MultiFileUploadZone
+            files={files}
+            parsedData={parsedData}
+            onFilesUpload={handleFilesUpload}
+            onRemoveFile={handleRemoveFile}
+            onStatementNameChange={handleStatementNameChange}
+            maxFiles={maxFiles}
             isDark={isDarkMode}
-            statementName={editableStatementNames.statement1}
-            onStatementNameChange={(name) => setEditableStatementNames(prev => ({ ...prev, statement1: name }))}
-            comparisonGenerated={comparisonGenerated}
-          />
-          <FileUploadZone
-            onFileUpload={(file) => handleFileUpload('statement2', file)}
-            label="Statement 2"
-            isUploading={uploading.statement2}
-            uploadedFile={files.statement2}
-            parsedData={parsedData.statement2}
-            isDark={isDarkMode}
-            statementName={editableStatementNames.statement2}
-            onStatementNameChange={(name) => setEditableStatementNames(prev => ({ ...prev, statement2: name }))}
-            comparisonGenerated={comparisonGenerated}
+            isGenerating={isGeneratingComparison}
           />
         </div>
 
+        {/* Comparison Example */}
+        {!allFilesUploaded && (
+          <div className="mb-12 max-w-3xl mx-auto">
+            <div className={`rounded-xl p-6 border ${
+              isDarkMode ? 'bg-black border-white' : 'bg-white border-gray-200'
+            }`}>
+              <h3 className={`text-center text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                Example Comparison
+              </h3>
+              <div className="space-y-3">
+                {[
+                  { category: 'Food & Dining', color: '#FF6B6B', stmt1: '$234.50', stmt2: '$189.23', icon: '🍽️' },
+                  { category: 'Groceries', color: '#4ECDC4', stmt1: '$456.78', stmt2: '$512.34', icon: '🛒' },
+                  { category: 'Gas & Transportation', color: '#45B7D1', stmt1: '$120.45', stmt2: '$98.67', icon: '🚗' },
+                ].map((item, i) => (
+                  <div key={i} className={`flex items-center justify-between p-3 rounded-lg ${
+                    isDarkMode ? 'bg-black border border-white' : 'bg-gray-50'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-sm"
+                        style={{ backgroundColor: item.color + '20' }}
+                      >
+                        {item.icon}
+                      </div>
+                      <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                        {item.category}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-sm font-semibold ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
+                        {item.stmt1}
+                      </span>
+                      <span className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>vs</span>
+                      <span className={`text-sm font-semibold ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
+                        {item.stmt2}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className={`text-xs text-center mt-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>
+                Upload your statements to see real comparisons
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Generate Comparison Button */}
-        {bothFilesUploaded && !comparisonGenerated && (
+        {hasEnoughFiles && !comparisonGenerated && (
           <div className="text-center mb-8">
             <button
               onClick={generateComparison}
@@ -3224,176 +3338,115 @@ function App() {
               className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 ${
                 isGeneratingComparison
                   ? isDarkMode 
-                    ? 'bg-gray-500 text-gray-300 cursor-not-allowed shadow-lg' 
+                    ? 'bg-black text-gray-300 cursor-not-allowed shadow-lg border-2 border-white' 
                     : 'bg-gray-400 text-gray-600 cursor-not-allowed shadow-lg'
                   : isDarkMode 
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl' 
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
+                    ? 'bg-black border-2 border-white hover:bg-gray-900 text-white shadow-lg hover:shadow-xl' 
+                    : 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl'
               }`}
             >
               {isGeneratingComparison ? 'Generating...' : 'Generate Comparison'}
             </button>
-            <p className={`text-sm mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            <p className={`text-sm mt-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
               This will process all categories and charge based on pages processed
             </p>
           </div>
         )}
 
-        {/* Transaction Editors */}
-        {showTransactionEditor.statement1 && parsedData.statement1 && (
+        {/* Transaction Editor */}
+        {showTransactionEditor >= 0 && parsedData[showTransactionEditor] && (
           <div className="mb-8">
             <TransactionEditor
-              transactions={parsedData.statement1.transactions}
-              onSave={(transactions) => handleTransactionEditorSave('statement1', transactions)}
-              onCancel={() => setShowTransactionEditor(prev => ({ ...prev, statement1: false }))}
+              transactions={parsedData[showTransactionEditor].transactions}
+              onSave={(transactions) => handleTransactionEditorSave(showTransactionEditor, transactions)}
+              onCancel={() => setShowTransactionEditor(-1)}
               isDark={isDarkMode}
-              statementTitle={editableStatementNames.statement1}
-            />
-          </div>
-        )}
-
-        {showTransactionEditor.statement2 && parsedData.statement2 && (
-          <div className="mb-8">
-            <TransactionEditor
-              transactions={parsedData.statement2.transactions}
-              onSave={(transactions) => handleTransactionEditorSave('statement2', transactions)}
-              onCancel={() => setShowTransactionEditor(prev => ({ ...prev, statement2: false }))}
-              isDark={isDarkMode}
-              statementTitle={editableStatementNames.statement2}
+              statementTitle={statementNames[showTransactionEditor] || `Statement ${showTransactionEditor + 1}`}
             />
           </div>
         )}
 
         {/* Overall Summary */}
-        {bothFilesUploaded && comparisonGenerated && (
+        {allFilesUploaded && comparisonGenerated && parsedData.length > 0 && (
           <div className={`rounded-xl p-6 shadow-lg border mb-8 ${
             isDarkMode 
-              ? 'bg-gray-800 border-gray-700' 
+              ? 'bg-black border-white' 
               : 'bg-white border-gray-100'
           }`}>
-            <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+            <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
               Overall Summary
             </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Statement 1 Summary */}
-                <div className={`p-4 rounded-lg border ${
-                  isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
+            <div className={`grid grid-cols-1 ${parsedData.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-2'} gap-6`}>
+              {parsedData.map((data, index) => {
+                const net = (data.totalDeposits || 0) - (data.totalWithdrawals || 0);
+                return (
+                  <div key={index} className={`p-4 rounded-lg border ${
+                  isDarkMode ? 'bg-black border-white' : 'bg-gray-50 border-gray-200'
                 }`}>
-                  <h4 className={`font-medium mb-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                    {editableStatementNames.statement1}
+                  <h4 className={`font-medium mb-3 ${isDarkMode ? 'text-white' : 'text-gray-700'}`}>
+                      {statementNames[index] || `Statement ${index + 1}`}
                   </h4>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Transactions Found:</span>
-                      <span className={`font-medium ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                        {parsedData.statement1?.transactions.length || 0}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Withdrawals:</span>
-                      <span className={`font-medium ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                        -${parsedData.statement1?.totalWithdrawals.toFixed(2) || '0.00'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Deposits:</span>
+                      <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Transactions Found:</span>
                       <span className={`font-medium ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
-                        +${parsedData.statement1?.totalDeposits.toFixed(2) || '0.00'}
+                          {data.transactions.length}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Total Withdrawals:</span>
+                      <span className={`font-medium ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
+                          -${data.totalWithdrawals.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Total Deposits:</span>
+                      <span className={`font-medium ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
+                          +${data.totalDeposits.toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between pt-2 border-t border-gray-300 dark:border-gray-600">
-                      <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Net:</span>
+                      <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-700'}`}>Net:</span>
                       <span className={`font-bold ${
-                        (parsedData.statement1?.totalDeposits || 0) - (parsedData.statement1?.totalWithdrawals || 0) >= 0
+                          net >= 0
                           ? isDarkMode ? 'text-green-400' : 'text-green-600'
                           : isDarkMode ? 'text-red-400' : 'text-red-600'
                       }`}>
-                        {((parsedData.statement1?.totalDeposits || 0) - (parsedData.statement1?.totalWithdrawals || 0)) >= 0 ? '+' : ''}
-                        ${((parsedData.statement1?.totalDeposits || 0) - (parsedData.statement1?.totalWithdrawals || 0)).toFixed(2)}
+                          {net >= 0 ? '+' : ''}${net.toFixed(2)}
                       </span>
                     </div>
                   </div>
                 </div>
-
-                {/* Statement 2 Summary */}
-                <div className={`p-4 rounded-lg border ${
-                  isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
-                }`}>
-                  <h4 className={`font-medium mb-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                    {editableStatementNames.statement2}
-                  </h4>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Transactions Found:</span>
-                      <span className={`font-medium ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                        {parsedData.statement2?.transactions.length || 0}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Withdrawals:</span>
-                      <span className={`font-medium ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                        -${parsedData.statement2?.totalWithdrawals.toFixed(2) || '0.00'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Deposits:</span>
-                      <span className={`font-medium ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
-                        +${parsedData.statement2?.totalDeposits.toFixed(2) || '0.00'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between pt-2 border-t border-gray-300 dark:border-gray-600">
-                      <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Net:</span>
-                      <span className={`font-bold ${
-                        (parsedData.statement2?.totalDeposits || 0) - (parsedData.statement2?.totalWithdrawals || 0) >= 0
-                          ? isDarkMode ? 'text-green-400' : 'text-green-600'
-                          : isDarkMode ? 'text-red-400' : 'text-red-600'
-                      }`}>
-                        {((parsedData.statement2?.totalDeposits || 0) - (parsedData.statement2?.totalWithdrawals || 0)) >= 0 ? '+' : ''}
-                        ${((parsedData.statement2?.totalDeposits || 0) - (parsedData.statement2?.totalWithdrawals || 0)).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                );
+              })}
               </div>
 
-            {/* Edit Transactions Buttons - Underneath Overall Summary */}
-            <div className="mt-6 mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="text-center">
+            {/* Edit Transactions Buttons */}
+            <div className={`mt-6 grid grid-cols-1 ${parsedData.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-2'} gap-4`}>
+              {parsedData.map((data, index) => (
+                <div key={index} className="text-center">
                 <button
-                  onClick={() => setShowTransactionEditor(prev => ({ ...prev, statement1: true }))}
+                    onClick={() => setShowTransactionEditor(index)}
                   className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
                     isDarkMode 
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105' 
-                      : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
+                      ? 'bg-green-600 hover:bg-green-700 text-white hover:scale-105' 
+                      : 'bg-green-600 hover:bg-green-700 text-white hover:scale-105'
                   }`}
                 >
                   <FileText className="h-4 w-4" />
-                  Edit {editableStatementNames.statement1}
+                    Edit {statementNames[index] || `Statement ${index + 1}`}
                 </button>
               </div>
-              <div className="text-center">
-                <button
-                  onClick={() => setShowTransactionEditor(prev => ({ ...prev, statement2: true }))}
-                  className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
-                    isDarkMode 
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105' 
-                      : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
-                  }`}
-                >
-                  <FileText className="h-4 w-4" />
-                  Edit {editableStatementNames.statement2}
-                </button>
+              ))}
               </div>
-            </div>
-
           </div>
         )}
 
         {/* Category Selection */}
-        {bothFilesUploaded && comparisonGenerated && (
+        {allFilesUploaded && comparisonGenerated && (
           <div className={`rounded-xl p-6 shadow-lg border mb-8 ${
             isDarkMode 
-              ? 'bg-gray-800 border-gray-700' 
+              ? 'bg-black border-white' 
               : 'bg-white border-gray-100'
           }`}>
             <CategorySelector
@@ -3402,7 +3455,7 @@ function App() {
               comparisonData={comparisonResults}
               parsedData={parsedData}
               isDark={isDarkMode}
-              editableStatementNames={editableStatementNames}
+              statementNames={statementNames}
             />
           </div>
         )}
@@ -3412,8 +3465,7 @@ function App() {
           <div className="space-y-6">
             <ComparisonResults
               data={comparisonResults}
-              statement1Name={editableStatementNames.statement1}
-              statement2Name={editableStatementNames.statement2}
+              statementNames={statementNames}
               isPreview={false}
               onUnlock={() => setShowPaywall(true)}
               isDark={isDarkMode}
@@ -3421,11 +3473,11 @@ function App() {
 
             <div className={`rounded-xl p-6 shadow-lg border ${
               isDarkMode 
-                ? 'bg-gray-800 border-gray-700' 
+                ? 'bg-black border-white' 
                 : 'bg-white border-gray-100'
             }`}>
               <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
-                isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                isDarkMode ? 'text-white' : 'text-gray-800'
               }`}>
                 <Download className={`h-5 w-5 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
                 Export Options
@@ -3468,8 +3520,8 @@ function App() {
               onClick={resetComparison}
               className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium ${
                 isDarkMode 
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105' 
-                  : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
+                  ? 'bg-green-600 hover:bg-green-700 text-white hover:scale-105' 
+                  : 'bg-green-600 hover:bg-green-700 text-white hover:scale-105'
               }`}
             >
               <Upload className="h-5 w-5" />
@@ -3478,201 +3530,6 @@ function App() {
           </div>
         )}
 
-        {/* Animation Section */}
-        {!bothFilesUploaded && (
-          <div className="mt-16 mb-16">
-            <div className="text-center mb-12">
-              <h3 className={`text-2xl font-bold mb-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                Transform Your Bank Statements
-              </h3>
-              <p className={`text-lg ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                Two statements, one clear comparison
-              </p>
-            </div>
-            
-            <div className="relative max-w-4xl mx-auto">
-              {/* Flowing Animation Container */}
-              <div className="relative h-96 overflow-hidden">
-                {/* Step 1: Two Documents */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="flex gap-8 animate-pulse">
-                    {/* Document 1 */}
-                    <div className={`
-                      w-32 h-40 rounded-lg shadow-lg transform transition-all duration-[4000ms] ease-in-out
-                      hover:scale-110 hover:-translate-x-16 hover:-rotate-12
-                      ${isDarkMode ? 'bg-gradient-to-b from-gray-700 to-gray-800 border border-gray-600' : 'bg-gradient-to-b from-white to-gray-50 border border-gray-200'}
-                    `}>
-                      <div className={`p-3 border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
-                        <div className={`h-2 rounded mb-1 ${isDarkMode ? 'bg-gray-500' : 'bg-gray-400'}`} style={{ width: '80%' }}></div>
-                        <div className={`h-1 rounded ${isDarkMode ? 'bg-gray-600' : 'bg-gray-300'}`} style={{ width: '60%' }}></div>
-                      </div>
-                      <div className="p-3 space-y-2">
-                        {[...Array(6)].map((_, i) => (
-                          <div key={i} className="flex justify-between items-center">
-                            <div className={`h-1 rounded ${isDarkMode ? 'bg-gray-600' : 'bg-gray-300'}`} style={{ width: '60%' }}></div>
-                            <div className={`h-1 rounded ${isDarkMode ? 'bg-gray-600' : 'bg-gray-300'}`} style={{ width: '20%' }}></div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {/* Document 2 */}
-                    <div className={`
-                      w-32 h-40 rounded-lg shadow-lg transform transition-all duration-[4000ms] ease-in-out
-                      hover:scale-110 hover:translate-x-16 hover:rotate-12
-                      ${isDarkMode ? 'bg-gradient-to-b from-gray-700 to-gray-800 border border-gray-600' : 'bg-gradient-to-b from-white to-gray-50 border border-gray-200'}
-                    `}>
-                      <div className={`p-3 border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
-                        <div className={`h-2 rounded mb-1 ${isDarkMode ? 'bg-gray-500' : 'bg-gray-400'}`} style={{ width: '70%' }}></div>
-                        <div className={`h-1 rounded ${isDarkMode ? 'bg-gray-600' : 'bg-gray-300'}`} style={{ width: '50%' }}></div>
-                      </div>
-                      <div className="p-3 space-y-2">
-                        {[...Array(6)].map((_, i) => (
-                          <div key={i} className="flex justify-between items-center">
-                            <div className={`h-1 rounded ${isDarkMode ? 'bg-gray-600' : 'bg-gray-300'}`} style={{ width: '55%' }}></div>
-                            <div className={`h-1 rounded ${isDarkMode ? 'bg-gray-600' : 'bg-gray-300'}`} style={{ width: '25%' }}></div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Merge Arrow */}
-                  <div className={`
-                    absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2
-                    transition-all duration-[4000ms] ease-in-out opacity-0 hover:opacity-100
-                  `}>
-                    <div className={`
-                      p-3 rounded-full shadow-lg
-                      ${isDarkMode ? 'bg-blue-600' : 'bg-blue-500'}
-                    `}>
-                      <BarChart3 className="h-6 w-6 text-white animate-spin" style={{ animationDuration: '3s' }} />
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Step 2: Comparison Result (appears on hover) */}
-                <div className={`
-                  absolute inset-0 flex items-center justify-center
-                  opacity-0 hover:opacity-100 transition-all duration-[2000ms] ease-in-out
-                  transform translate-y-8 hover:translate-y-0
-                `}>
-                  <div className={`
-                    w-80 h-64 rounded-xl shadow-2xl p-6
-                    ${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}
-                  `}>
-                    {/* Header */}
-                    <div className="flex items-center gap-3 mb-4">
-                      <BarChart3 className={`h-6 w-6 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                      <h4 className={`font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                        Spending Comparison
-                      </h4>
-                    </div>
-                    
-                    {/* Category Comparisons */}
-                    <div className="space-y-3">
-                      {categories.slice(0, 4).map((category, i) => {
-                        const Icon = category.icon;
-                        return (
-                          <div key={i} className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-3 h-3 rounded-full"
-                                style={{ backgroundColor: category.color }}
-                              ></div>
-                              <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                                {category.name}
-                              </span>
-                            </div>
-                            <div className="flex gap-2">
-                              <div className={`px-2 py-1 rounded text-xs ${isDarkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-700'}`}>
-                                ${(Math.random() * 200 + 50).toFixed(0)}
-                              </div>
-                              <div className={`px-2 py-1 rounded text-xs ${isDarkMode ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-700'}`}>
-                                ${(Math.random() * 200 + 50).toFixed(0)}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    
-
-                  </div>
-                </div>
-                
-                {/* Floating particles effect */}
-                <div className="absolute inset-0 pointer-events-none">
-                  {[...Array(6)].map((_, i) => (
-                    <div
-                      key={i}
-                      className={`
-                        absolute w-2 h-2 rounded-full opacity-30
-                        animate-pulse
-                        ${isDarkMode ? 'bg-blue-400' : 'bg-blue-500'}
-                      `}
-                      style={{
-                        left: `${20 + i * 15}%`,
-                        top: `${30 + (i % 2) * 40}%`,
-                        animationDelay: `${i * 0.5}s`,
-                        animationDuration: '2s'
-                      }}
-                    ></div>
-                  ))}
-                </div>
-              </div>
-              
-
-            </div>
-          </div>
-        )}
-
-        {/* Features Section */}
-        {!bothFilesUploaded && (
-          <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center p-6">
-              <div className={`p-4 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center ${
-                isDarkMode ? 'bg-blue-900/30' : 'bg-blue-100'
-              }`}>
-                <Upload className={`h-8 w-8 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-              </div>
-              <h3 className={`font-semibold mb-2 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                Smart Upload
-              </h3>
-              <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
-                Drag & drop PDFs from Wells Fargo, Chase, Bank of America, and more
-              </p>
-            </div>
-            
-            <div className="text-center p-6">
-              <div className={`p-4 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center ${
-                isDarkMode ? 'bg-green-900/30' : 'bg-green-100'
-              }`}>
-                <Users className={`h-8 w-8 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
-              </div>
-              <h3 className={`font-semibold mb-2 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                Perfect for Couples
-              </h3>
-              <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
-                Compare spending between partners, roommates, or co-parents easily
-              </p>
-            </div>
-            
-            <div className="text-center p-6">
-              <div className={`p-4 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center ${
-                isDarkMode ? 'bg-purple-900/30' : 'bg-purple-100'
-              }`}>
-                <BarChart3 className={`h-8 w-8 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
-              </div>
-              <h3 className={`font-semibold mb-2 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                Instant Analysis
-              </h3>
-              <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
-                Get detailed breakdowns with charts and exportable reports
-              </p>
-            </div>
-          </div>
-        )}
         <PaywallModal
           isOpen={showPaywall}
           onClose={() => setShowPaywall(false)}
