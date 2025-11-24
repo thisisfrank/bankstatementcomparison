@@ -2547,7 +2547,7 @@ function TransactionEditForm({
 
 
 function App() {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
   const [parsedData, setParsedData] = useState<ParsedStatement[]>([]);
   const [uploading, setUploading] = useState<boolean[]>([]);
