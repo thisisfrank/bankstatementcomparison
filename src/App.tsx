@@ -10,19 +10,10 @@ import { stripeService, StripePlanId } from './lib/stripeService';
 
 
 
-// API Configuration
-const API_KEY = import.meta.env.VITE_PDF_PARSER_API_KEY || 'api-AB7psQuumDdjVHLTPYMDghH2xUgaKcuJZVvwReMMsxM9iQBaYJg/BrelRUX07neH';
-const API_BASE_URL = import.meta.env.VITE_PDF_PARSER_API_URL || 'https://api2.bankstatementconverter.com/api/v1';
-
-// Log API configuration for debugging
-console.log('API Configuration:', {
-  API_BASE_URL,
-  API_KEY: API_KEY ? '***' + API_KEY.slice(-4) : 'Not set',
-  envVars: {
-    VITE_PDF_PARSER_API_KEY: import.meta.env.VITE_PDF_PARSER_API_KEY ? 'Set' : 'Not set',
-    VITE_PDF_PARSER_API_URL: import.meta.env.VITE_PDF_PARSER_API_URL ? 'Set' : 'Not set'
-  }
-});
+// Get Supabase URL for Edge Functions
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/parse-bank-statement`;
 
 interface Transaction {
   id: string;
@@ -73,21 +64,36 @@ class BankStatementParser {
 
   async parsePDF(file: File): Promise<ParsedStatement> {
     try {
-      console.log('Starting PDF parsing with API:', API_BASE_URL);
+      console.log('Starting PDF parsing via Edge Function');
       
-
+      // Convert file to base64 for JSON transport
+      const fileBuffer = await file.arrayBuffer();
+      const uint8Array = new Uint8Array(fileBuffer);
       
-      // Step 1: Upload the PDF file
-      const formData = new FormData();
-      formData.append('file', file);
+      // Convert to base64 in chunks to avoid stack overflow
+      let binaryString = '';
+      const chunkSize = 8192; // Process 8KB at a time
+      for (let i = 0; i < uint8Array.length; i += chunkSize) {
+        const chunk = uint8Array.subarray(i, i + chunkSize);
+        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      const fileBase64 = btoa(binaryString);
 
-      console.log('Uploading file to API...');
-      const uploadResponse = await fetch(`${API_BASE_URL}/BankStatement`, {
+      // Step 1: Upload the PDF file via Edge Function
+      console.log('Uploading file to Edge Function...');
+      const uploadResponse = await fetch(EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
-          'Authorization': API_KEY,
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         },
-        body: formData
+        body: JSON.stringify({
+          action: 'upload',
+          file: {
+            data: fileBase64,
+            name: file.name
+          }
+        })
       });
 
       if (!uploadResponse.ok) {
@@ -114,13 +120,16 @@ class BankStatementParser {
           attempts++;
           
           console.log(`Status check attempt ${attempts}/${maxAttempts}...`);
-          const statusResponse = await fetch(`${API_BASE_URL}/BankStatement/status`, {
+          const statusResponse = await fetch(EDGE_FUNCTION_URL, {
             method: 'POST',
             headers: {
-              'Authorization': API_KEY,
               'Content-Type': 'application/json',
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
             },
-            body: JSON.stringify([uuid])
+            body: JSON.stringify({
+              action: 'status',
+              uuid: uuid
+            })
           });
 
           if (!statusResponse.ok) {
@@ -141,13 +150,16 @@ class BankStatementParser {
 
       // Step 3: Convert the statement to JSON
       console.log('Converting statement to JSON...');
-      const convertResponse = await fetch(`${API_BASE_URL}/BankStatement/convert?format=JSON`, {
+      const convertResponse = await fetch(EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
-          'Authorization': API_KEY,
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify([uuid])
+        body: JSON.stringify({
+          action: 'convert',
+          uuid: uuid
+        })
       });
 
       if (!convertResponse.ok) {
@@ -170,7 +182,7 @@ class BankStatementParser {
       
       // All retries failed
       console.error('All API attempts failed, falling back to sample data generation...');
-      console.log('Last error:', error?.message);
+      console.log('Last error:', error instanceof Error ? error.message : String(error));
       
       // Add a flag to indicate API was not used
       const sampleData = this.generateSampleData(file.name);
@@ -1566,7 +1578,7 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
   );
 }
 
-function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthenticated, onShowPricing, userTier }: {
+function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthenticated, onShowPricing, userTier, userEmail }: {
   isVisible: boolean;
   onBack: () => void;
   isDark: boolean;
@@ -1574,6 +1586,7 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
   isAuthenticated: boolean;
   onShowPricing: () => void;
   userTier?: string;
+  userEmail?: string;
 }) {
   if (!isVisible) return null;
 
@@ -1730,6 +1743,15 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
             </div>
           </div>
         </div>
+        
+        {/* Signed in email display */}
+        {isAuthenticated && userEmail && (
+          <div className={`text-center mt-4 text-sm ${
+            isDark ? 'text-gray-400' : 'text-gray-600'
+          }`}>
+            Signed in as: {userEmail}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1820,9 +1842,15 @@ function UsagePage({ isVisible, onBack, isDark }: {
 
   // Calculate credits based on user tier
   // For anonymous users, always use the anonymous tier config regardless of any cached user data
-  const tierConfig = user ? TIER_CONFIG[user.tier] : TIER_CONFIG.anonymous;
-  const creditsRemaining = user ? user.credits : (tierConfig.credits - anonymousUsage);
-  const creditsUsed = user ? (tierConfig.credits - user.credits) : anonymousUsage;
+  const tierConfig = user && user.tier && TIER_CONFIG[user.tier] 
+    ? TIER_CONFIG[user.tier] 
+    : TIER_CONFIG.anonymous;
+  const creditsRemaining = user && typeof user.credits === 'number' 
+    ? user.credits 
+    : (tierConfig.credits - anonymousUsage);
+  const creditsUsed = user && typeof user.credits === 'number'
+    ? (tierConfig.credits - user.credits) 
+    : anonymousUsage;
   const totalCredits = tierConfig.credits;
 
   return (
@@ -2566,6 +2594,7 @@ function App() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userTier, setUserTier] = useState<string | undefined>(undefined);
+  const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
 
   const [comparisonGenerated, setComparisonGenerated] = useState(false);
   const [isGeneratingComparison, setIsGeneratingComparison] = useState(false);
@@ -2587,6 +2616,7 @@ function App() {
           console.log('Setting authenticated state to true for user:', session.user.id);
           setIsAuthenticated(true);
           setIsSignedIn(true);
+          setUserEmail(session.user.email);
           
           // Try to get full profile, but don't block on it
           try {
@@ -2602,6 +2632,7 @@ function App() {
           setIsAuthenticated(false);
           setIsSignedIn(false);
           setUserTier(undefined);
+          setUserEmail(undefined);
         }
       } catch (error) {
         console.error('Error checking auth status:', error);
@@ -2629,12 +2660,14 @@ function App() {
         setIsAuthenticated(false);
         setIsSignedIn(false);
         setUserTier(undefined);
+        setUserEmail(undefined);
       } else if (event === 'SIGNED_IN' && session) {
         console.log('Processing SIGNED_IN event - this should not happen if user clicked sign out!');
         try {
           // Set auth state immediately to prevent hanging UI
           setIsAuthenticated(true);
           setIsSignedIn(true);
+          setUserEmail(session.user?.email);
           
           // Try to get user profile with timeout
           const user = await userService.getCurrentUser();
@@ -3565,6 +3598,7 @@ function App() {
           isAuthenticated={isAuthenticated}
           onShowPricing={() => setShowPricingModal(true)}
           userTier={userTier}
+          userEmail={userEmail}
         />
       ) : showUsagePage ? (
         <UsagePage
