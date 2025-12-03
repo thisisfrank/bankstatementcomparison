@@ -193,10 +193,18 @@ class BankStatementParser {
 
   private processAPIResponse(apiResponse: any, fileName: string): ParsedStatement {
     console.log('Processing API response:', apiResponse);
+    console.log('Full API response structure:', JSON.stringify(apiResponse, null, 2));
     
     // The API returns { normalised: [...] } format
     const rawTransactions = apiResponse.normalised || [];
     console.log('Raw transactions from API:', rawTransactions);
+    console.log('Number of raw transactions:', rawTransactions.length);
+    
+    // Check if the response is empty
+    if (!rawTransactions || rawTransactions.length === 0) {
+      console.warn('WARNING: API returned no transactions! Check if PDF contains parseable transaction data.');
+      console.log('API response keys:', Object.keys(apiResponse));
+    }
     
     const transactions: Transaction[] = [];
     const withdrawals: Transaction[] = [];
@@ -237,6 +245,7 @@ class BankStatementParser {
     });
 
     console.log('Processed transactions:', transactions);
+    console.log('Processed transactions count:', transactions.length);
     console.log('Withdrawals:', withdrawals);
     console.log('Deposits:', deposits);
 
@@ -768,9 +777,9 @@ function CategorySelector({
                 }
               `}
             >
-              <div className="flex flex-col items-center space-y-2">
+              <div className="flex flex-col items-center justify-center space-y-2">
                 <div 
-                  className="p-3 rounded-full"
+                  className="p-3 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: category.color + '20' }}
                 >
                   <Icon 
@@ -783,8 +792,8 @@ function CategorySelector({
                 </span>
                 
                 {comparison && (
-                  <div className={`text-xs text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    <div>${comparison.difference.toFixed(2)} diff</div>
+                  <div className="text-xs text-center text-white">
+                    <div>${(Math.max(...comparison.statementValues) - Math.min(...comparison.statementValues)).toFixed(2)} range</div>
                   </div>
                 )}
               </div>
@@ -1588,6 +1597,47 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
   userTier?: string;
   userEmail?: string;
 }) {
+  const [user, setUser] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [anonymousUsage, setAnonymousUsage] = useState<number>(0);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // First check if user is actually authenticated with Supabase
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        
+        let currentUser = null;
+        if (authUser) {
+          // User is authenticated, get their profile
+          currentUser = await userService.getCurrentUser();
+          setUser(currentUser);
+        } else {
+          // User is not authenticated, treat as anonymous
+          setUser(null);
+        }
+        
+        // Get usage history (only call once)
+        const history = await userService.getUsageHistory();
+        
+        // Calculate anonymous usage if not authenticated
+        if (!currentUser) {
+          const totalUsed = history.reduce((sum, log) => sum + log.credits_used, 0);
+          setAnonymousUsage(totalUsed);
+        }
+      } catch (error) {
+        console.error('Error loading usage data:', error);
+        setAnonymousUsage(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isVisible) {
+      loadData();
+    }
+  }, [isVisible]);
+
   if (!isVisible) return null;
 
   const handleManageSubscription = () => {
@@ -1601,6 +1651,18 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
       onShowPricing();
     }
   };
+
+  // Calculate credits based on user tier
+  const tierConfig = user && user.tier && TIER_CONFIG[user.tier] 
+    ? TIER_CONFIG[user.tier] 
+    : TIER_CONFIG.anonymous;
+  const creditsRemaining = user && typeof user.credits === 'number' 
+    ? user.credits 
+    : (tierConfig.credits - anonymousUsage);
+  const creditsUsed = user && typeof user.credits === 'number'
+    ? (tierConfig.credits - user.credits) 
+    : anonymousUsage;
+  const totalCredits = tierConfig.credits;
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
@@ -1742,262 +1804,72 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
               </div>
             </div>
           </div>
-        </div>
-        
-        {/* Signed in email display */}
-        {isAuthenticated && userEmail && (
-          <div className={`text-center mt-4 text-sm ${
-            isDark ? 'text-gray-400' : 'text-gray-600'
-          }`}>
-            Signed in as: {userEmail}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function UsagePage({ isVisible, onBack, isDark }: {
-  isVisible: boolean;
-  onBack: () => void;
-  isDark: boolean;
-}) {
-  const [usageData, setUsageData] = useState<any[]>([]);
-  const [user, setUser] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [anonymousUsage, setAnonymousUsage] = useState<number>(0);
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        // First check if user is actually authenticated with Supabase
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        
-        let currentUser = null;
-        if (authUser) {
-          // User is authenticated, get their profile
-          currentUser = await userService.getCurrentUser();
-          setUser(currentUser);
-        } else {
-          // User is not authenticated, treat as anonymous
-          setUser(null);
-        }
-        
-        // Get usage history (only call once)
-        const history = await userService.getUsageHistory();
-        
-        // Calculate anonymous usage if not authenticated
-        if (!currentUser) {
-          const totalUsed = history.reduce((sum, log) => sum + log.credits_used, 0);
-          setAnonymousUsage(totalUsed);
-        }
-        
-        // Helper function to get tier name from credits used
-        const getTierNameFromCredits = (creditsUsed: number): string => {
-          switch (creditsUsed) {
-            case 150: return 'Starter';
-            case 400: return 'Pro';
-            case 1000: return 'Business';
-            default: return 'Unknown Tier';
-          }
-        };
-
-        // Format the usage data for display
-        const formattedHistory = history.map(log => ({
-          id: log.id,
-          date: new Date(log.created_at).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
-          description: log.action === 'comparison' 
-            ? `Bank Statement Comparison - ${log.pages_processed} page${log.pages_processed > 1 ? 's' : ''}`
-            : log.action === 'credit_purchase'
-            ? `Upgraded to ${getTierNameFromCredits(log.credits_used)}`
-            : `Page Processing - ${log.pages_processed} page${log.pages_processed > 1 ? 's' : ''}`,
-          creditsUsed: log.credits_used,
-          action: log.action,
-          type: 'usage'
-        }));
-        
-        setUsageData(formattedHistory);
-      } catch (error) {
-        console.error('Error loading usage data:', error);
-        // Set empty data on error to prevent infinite loading
-        setUsageData([]);
-        setAnonymousUsage(0);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (isVisible) {
-      loadData();
-    }
-  }, [isVisible]);
-
-  if (!isVisible) return null;
-
-  // Calculate credits based on user tier
-  // For anonymous users, always use the anonymous tier config regardless of any cached user data
-  const tierConfig = user && user.tier && TIER_CONFIG[user.tier] 
-    ? TIER_CONFIG[user.tier] 
-    : TIER_CONFIG.anonymous;
-  const creditsRemaining = user && typeof user.credits === 'number' 
-    ? user.credits 
-    : (tierConfig.credits - anonymousUsage);
-  const creditsUsed = user && typeof user.credits === 'number'
-    ? (tierConfig.credits - user.credits) 
-    : anonymousUsage;
-  const totalCredits = tierConfig.credits;
-
-  return (
-    <div className={`min-h-screen transition-colors duration-300 ${
-      isDark 
-        ? 'bg-black' 
-        : 'bg-gradient-to-br from-blue-50 via-white to-green-50'
-    }`}>
-      {/* Navigation Header */}
-      <div className={`sticky top-0 z-40 backdrop-blur-sm border-b ${
-        isDark ? 'bg-black/90 border-white' : 'bg-white/80 border-gray-200'
-      }`}>
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-black border-2 border-white">
-                <BarChart3 className="h-5 w-5 text-white" />
-              </div>
-              <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                BankCompare
-              </span>
-            </div>
-            
-            <button 
-              onClick={onBack}
-              className="px-4 py-2 rounded-lg font-medium transition-colors bg-black border-2 border-white text-white hover:bg-gray-900"
-            >
-              ← Back
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className={`rounded-xl border shadow-lg p-8 ${
-          isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
-        }`}>
-          <div className="mb-8">
-            <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+          
+          {/* Usage Section */}
+          <div className="text-center mt-8 mb-8">
+            <h1 className={`text-3xl font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
               Usage
             </h1>
-            
           </div>
           
-          {/* Credits Section */}
-          <div className={`p-6 rounded-lg border mb-8 ${
+          {/* Credits & Usage Section */}
+          <div className={`p-6 rounded-lg border ${
             isDark ? 'bg-black border-white' : 'bg-gray-50 border-gray-200'
           }`}>
-            <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
-              isDark ? 'text-gray-200' : 'text-gray-800'
-            }`}>
-              <DollarSign className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
-              Credits & Usage
-            </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div className="text-center">
-                <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-black'}`}>
-                  {creditsRemaining}
-                </div>
-                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Credits Remaining
-                </div>
+            {loading ? (
+              <div className={`text-center py-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                <Loader2 className="mx-auto h-6 w-6 animate-spin mb-2" />
+                <p className="text-sm">Loading...</p>
               </div>
-              <div className="text-center">
-                <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-black'}`}>
-                  {creditsUsed}
-                </div>
-                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Credits Used
-                </div>
-              </div>
-              <div className="text-center">
-                <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-black'}`}>
-                  {totalCredits}
-                </div>
-                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Total Credits
-                </div>
-              </div>
-            </div>
-            
-            {/* Progress Bar */}
-            <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-              <div 
-                className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${totalCredits > 0 ? (creditsRemaining / totalCredits) * 100 : 0}%` }}
-              ></div>
-            </div>
-            <div className={`text-xs text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              {totalCredits > 0 ? `${Math.round((creditsRemaining / totalCredits) * 100)}% remaining` : 'Subscribe for More Credits'}
-            </div>
-          </div>
-          
-          <div className="mb-6">
-            <h2 className={`text-xl font-semibold mb-4 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-              Recent Usage History
-            </h2>
-          </div>
-          
-          {loading ? (
-            <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              <Loader2 className="mx-auto h-8 w-8 animate-spin mb-4" />
-              <p>Loading usage history...</p>
-            </div>
-          ) : usageData.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className={`border-b ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
-                    <th className={`text-left py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                      Date
-                    </th>
-                    <th className={`text-left py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                      Description
-                    </th>
-                    <th className={`text-left py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="text-center">
+                    <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-black'}`}>
+                      {creditsRemaining}
+                    </div>
+                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Credits Remaining
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-black'}`}>
+                      {creditsUsed}
+                    </div>
+                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                       Credits Used
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usageData.map((item, index) => (
-                    <tr key={index} className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-100'}`}>
-                      <td className={`py-3 px-4 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                        {item.date}
-                      </td>
-                      <td className={`py-3 px-4 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                        {item.description}
-                      </td>
-                      <td className={`py-3 px-4 font-semibold ${
-                        item.action === 'credit_purchase' 
-                          ? isDark ? 'text-green-400' : 'text-green-600'
-                          : isDark ? 'text-red-400' : 'text-red-600'
-                      }`}>
-                        {item.action === 'credit_purchase' ? item.creditsUsed : `-${item.creditsUsed}`}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              <BarChart3 className="mx-auto h-12 w-12 mb-4 opacity-50" />
-              <h3 className="text-lg font-medium mb-2">No usage history yet</h3>
-              <p className="text-sm">Start comparing bank statements to see your usage here</p>
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-black'}`}>
+                      {totalCredits}
+                    </div>
+                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Total Credits
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Progress Bar */}
+                <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                  <div 
+                    className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${totalCredits > 0 ? (creditsRemaining / totalCredits) * 100 : 0}%` }}
+                  ></div>
+                </div>
+                <div className={`text-xs text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {totalCredits > 0 ? `${Math.round((creditsRemaining / totalCredits) * 100)}% remaining` : 'Subscribe for More Credits'}
+                </div>
+              </>
+            )}
+          </div>
+          
+          {/* Signed in email display - moved to bottom */}
+          {isAuthenticated && userEmail && (
+            <div className={`text-center mt-6 text-sm ${
+              isDark ? 'text-gray-400' : 'text-gray-600'
+            }`}>
+              Signed in as: {userEmail}
             </div>
           )}
         </div>
@@ -2006,10 +1878,11 @@ function UsagePage({ isVisible, onBack, isDark }: {
   );
 }
 
-function PastDocumentsPage({ isVisible, onBack, isDark }: {
+function PastDocumentsPage({ isVisible, onBack, isDark, onViewDetails }: {
   isVisible: boolean;
   onBack: () => void;
   isDark: boolean;
+  onViewDetails: (comparison: any) => void;
 }) {
   const [pastDocuments, setPastDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2218,6 +2091,17 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
                   
                   <div className="flex flex-wrap gap-3">
                     <button
+                      onClick={() => onViewDetails(doc)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${
+                        isDark 
+                          ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105' 
+                          : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
+                      }`}
+                    >
+                      <Eye className="h-4 w-4" />
+                      View Details
+                    </button>
+                    <button
                       onClick={() => handleDownloadPDF(doc.id)}
                       className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${
                         isDark 
@@ -2250,6 +2134,122 @@ function PastDocumentsPage({ isVisible, onBack, isDark }: {
                 <p className="text-sm">Create your first bank statement comparison to see it here</p>
               </div>
             )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ComparisonResultsPage({ 
+  isVisible, 
+  onBack, 
+  isDark,
+  comparisonData,
+  statementNames,
+  parsedData,
+  comparisonDate,
+  isHistorical = false,
+  onExportPDF,
+  onExportCSV
+}: {
+  isVisible: boolean;
+  onBack: () => void;
+  isDark: boolean;
+  comparisonData: { [key: string]: ComparisonResult };
+  statementNames: string[];
+  parsedData?: ParsedStatement[];
+  comparisonDate?: string;
+  isHistorical?: boolean;
+  onExportPDF?: () => void;
+  onExportCSV?: () => void;
+}) {
+  if (!isVisible || !comparisonData) return null;
+
+  return (
+    <div className={`min-h-screen transition-colors duration-300 ${
+      isDark 
+        ? 'bg-black' 
+        : 'bg-gradient-to-br from-blue-50 via-white to-green-50'
+    }`}>
+      {/* Header with back button */}
+      <div className={`sticky top-0 z-40 backdrop-blur-sm border-b ${
+        isDark ? 'bg-black/90 border-white' : 'bg-white/80 border-gray-200'
+      }`}>
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-black border-2 border-white">
+                <BarChart3 className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <span className={`font-semibold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                  {statementNames[0] || 'Statement 1'} vs {statementNames[1] || 'Statement 2'}
+                </span>
+                {comparisonDate && (
+                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {comparisonDate}
+                  </p>
+                )}
+              </div>
+            </div>
+            
+            <button 
+              onClick={onBack}
+              className="px-4 py-2 rounded-lg font-medium transition-colors bg-black border-2 border-white text-white hover:bg-gray-900"
+            >
+              ← Back
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Results Content */}
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <ComparisonResults
+          data={comparisonData}
+          statementNames={statementNames}
+          isPreview={false}
+          isDark={isDark}
+        />
+
+        {/* Export Options */}
+        {onExportPDF && onExportCSV && (
+          <div className={`rounded-xl p-6 shadow-lg border mt-6 ${
+            isDark ? 'bg-black border-white' : 'bg-white border-gray-100'
+          }`}>
+            <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+              isDark ? 'text-white' : 'text-gray-800'
+            }`}>
+              <Download className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+              Export Options
+            </h3>
+            
+            <div className="flex flex-wrap gap-4 justify-center">
+              <button
+                onClick={onExportPDF}
+                className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
+                  isDark 
+                    ? 'bg-red-600 hover:bg-red-700 text-white' 
+                    : 'bg-red-600 hover:bg-red-700 text-white'
+                }`}
+              >
+                <FileText className="h-5 w-5" />
+                Export PDF Report
+              </button>
+              
+              <button
+                onClick={onExportCSV}
+                className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
+                  isDark 
+                    ? 'bg-green-600 hover:bg-green-700 text-white' 
+                    : 'bg-green-600 hover:bg-green-700 text-white'
+                }`}
+              >
+                <Receipt className="h-5 w-5" />
+                Export CSV Data
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -2588,9 +2588,16 @@ function App() {
   const [showTransactionEditor, setShowTransactionEditor] = useState<number>(-1); // Index of statement being edited, -1 for none
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [showSettingsPage, setShowSettingsPage] = useState(false);
-  const [showUsagePage, setShowUsagePage] = useState(false);
   const [showPastDocumentsPage, setShowPastDocumentsPage] = useState(false);
   const [showAuthPage, setShowAuthPage] = useState(false);
+  const [showResultsPage, setShowResultsPage] = useState(false);
+  const [currentComparisonView, setCurrentComparisonView] = useState<{
+    data: { [key: string]: ComparisonResult };
+    statementNames: string[];
+    parsedData?: ParsedStatement[];
+    date?: string;
+    isHistorical: boolean;
+  } | null>(null);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userTier, setUserTier] = useState<string | undefined>(undefined);
@@ -2607,6 +2614,13 @@ function App() {
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
+        // Force clear states first to prevent stale UI
+        console.log('🔄 Clearing auth states before check...');
+        setIsAuthenticated(false);
+        setIsSignedIn(false);
+        setUserTier(undefined);
+        setUserEmail(undefined);
+        
         // Check for valid session instead of cached user data
         const { data: { session } } = await supabase.auth.getSession();
         console.log('Initial session check:', session ? 'Session exists' : 'No session', session?.user?.id);
@@ -2628,11 +2642,8 @@ function App() {
           }
         } else {
           // No valid session, user is not authenticated
-          console.log('No session found, setting authenticated state to false');
-          setIsAuthenticated(false);
-          setIsSignedIn(false);
-          setUserTier(undefined);
-          setUserEmail(undefined);
+          console.log('No session found, confirming authenticated state is false');
+          // States already cleared above
         }
       } catch (error) {
         console.error('Error checking auth status:', error);
@@ -2640,6 +2651,7 @@ function App() {
         setIsAuthenticated(false);
         setIsSignedIn(false);
         setUserTier(undefined);
+        setUserEmail(undefined);
       }
     };
     
@@ -2784,19 +2796,51 @@ function App() {
         files.map(file => parser.parsePDF(file))
       );
       
+      console.log('PDF parsing completed, setting parsed data...');
+      console.log('Results:', results);
+      console.log('Number of results:', results.length);
+      results.forEach((result, index) => {
+        console.log(`Statement ${index + 1} - Transactions: ${result.transactions.length}, Withdrawals: ${result.withdrawals.length}, Deposits: ${result.deposits.length}`);
+      });
+      
+      // Check if any results have no transactions
+      const emptyResults = results.filter(r => r.transactions.length === 0);
+      if (emptyResults.length > 0) {
+        console.warn(`WARNING: ${emptyResults.length} statement(s) have no transactions!`);
+      }
+      
       setParsedData(results);
       
       // Calculate total pages processed from all statements
+      console.log('Getting page counts...');
       const pageCounts = await Promise.all(
         files.map(file => parser.getPDFPageCount(file))
       );
       const totalPages = pageCounts.reduce((sum, count) => sum + count, 0);
+      console.log('Total pages:', totalPages);
       
       // Check tier limits before allowing comparison
-      const tierCheck = await userService.canPerformAction('comparison', totalPages);
+      console.log('Checking tier limits...');
+      let tierCheck;
+      try {
+        // Add a 5-second timeout to prevent hanging
+        const tierCheckPromise = userService.canPerformAction('comparison', totalPages);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Tier check timeout')), 5000)
+        );
+        
+        tierCheck = await Promise.race([tierCheckPromise, timeoutPromise]) as any;
+      } catch (error) {
+        console.error('Error checking tier limits:', error);
+        // Default to allowing if check fails or times out
+        tierCheck = { canPerform: true };
+      }
+      console.log('Tier check result:', tierCheck);
       
       if (!tierCheck.canPerform) {
         alert(tierCheck.reason || 'You have reached your tier limit. Please upgrade to continue.');
+        setIsGeneratingComparison(false);
+        setUploading(files.map(() => false));
         return;
       }
 
@@ -2839,15 +2883,55 @@ function App() {
         };
       });
       
+      console.log('Setting comparison results...');
       setComparisonResults(comparison);
       setComparisonGenerated(true);
+      console.log('Comparison generated successfully!');
+      
+      // Navigate to results page
+      setCurrentComparisonView({
+        data: comparison,
+        statementNames: statementNames,
+        parsedData: results,
+        date: new Date().toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        isHistorical: false
+      });
+      setShowResultsPage(true);
       
       // Log the usage based on pages processed
-      await userService.logUsage('comparison', totalPages);
+      try {
+        console.log('Logging usage...');
+        const logUsagePromise = userService.logUsage('comparison', totalPages);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Log usage timeout')), 3000)
+        );
+        await Promise.race([logUsagePromise, timeoutPromise]);
+        console.log('Usage logged successfully');
+      } catch (error) {
+        console.error('Error logging usage (non-blocking):', error);
+      }
       
       // Save comparison to database
       try {
-        const user = await userService.getCurrentUser();
+        console.log('Getting current user...');
+        let user;
+        try {
+          const getUserPromise = userService.getCurrentUser();
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Get user timeout')), 3000)
+          );
+          user = await Promise.race([getUserPromise, timeoutPromise]);
+        } catch (error) {
+          console.error('Error getting user (continuing anyway):', error);
+          user = null;
+        }
+        console.log('User:', user);
         const sessionId = userService.getSessionId();
         
         // Calculate totals for the comparison
@@ -2873,28 +2957,47 @@ function App() {
         
         console.log('Saving comparison data:', saveData);
         
-        const { data: savedData, error: saveError } = await supabase
-          .from('comparisons')
-          .insert(saveData)
-          .select();
+        try {
+          const savePromise = supabase
+            .from('comparisons')
+            .insert(saveData)
+            .select();
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Database save timeout')), 5000)
+          );
           
-        if (saveError) {
-          console.error('Error saving comparison:', saveError);
-        } else {
-          console.log('Successfully saved comparison:', savedData);
+          const { data: savedData, error: saveError } = await Promise.race([savePromise, timeoutPromise]) as any;
+            
+          if (saveError) {
+            console.error('Error saving comparison:', saveError);
+          } else {
+            console.log('Successfully saved comparison:', savedData);
+          }
+        } catch (error) {
+          console.error('Error or timeout saving comparison:', error);
         }
       } catch (error) {
         console.error('Error saving comparison to database:', error);
       }
       
-      alert(`Comparison completed! Processed ${totalPages} pages.`);
+      console.log('All operations completed, showing success message...');
+      
+      // Check if we actually have transaction data
+      const totalTransactions = results.reduce((sum, r) => sum + r.transactions.length, 0);
+      if (totalTransactions === 0) {
+        alert(`Warning: Processed ${totalPages} pages but found no transactions. The PDF may be image-based or have an unsupported format. Please check the browser console for details.`);
+      } else {
+        alert(`Comparison completed! Processed ${totalPages} pages and found ${totalTransactions} transactions.`);
+      }
       
     } catch (error) {
       console.error('Error processing PDFs:', error);
       alert('Error processing PDFs. Please try again.');
     } finally {
+      console.log('Resetting loading states in finally block...');
       setUploading(files.map(() => false));
       setIsGeneratingComparison(false);
+      console.log('Loading states reset complete');
     }
   };
 
@@ -3109,7 +3212,7 @@ function App() {
 
   return (
     <>
-      {!showAuthPage && !showPricingModal && !showSettingsPage && !showUsagePage && !showPastDocumentsPage ? (
+      {!showAuthPage && !showPricingModal && !showSettingsPage && !showPastDocumentsPage && !showResultsPage ? (
         <div className={`min-h-screen transition-colors duration-300 ${
           isDarkMode 
             ? 'bg-black' 
@@ -3126,8 +3229,8 @@ function App() {
                     onClick={() => {
                       setShowPricingModal(false);
                       setShowSettingsPage(false);
-                      setShowUsagePage(false);
                       setShowPastDocumentsPage(false);
+                      setShowResultsPage(false);
                     }}
                     className="p-2 rounded-lg transition-colors bg-black border-2 border-white hover:bg-gray-900"
                   >
@@ -3136,6 +3239,10 @@ function App() {
                 </div>
                 
                 <nav className="flex items-center gap-6">
+                  {(() => {
+                    console.log('🎨 UI Render - isSignedIn:', isSignedIn, 'isAuthenticated:', isAuthenticated);
+                    return null;
+                  })()}
                   {!isSignedIn ? (
                     <>
                       {/* Anonymous usage indicator - will be updated dynamically */}
@@ -3147,14 +3254,6 @@ function App() {
                         Anonymous Tier
                       </div>
                       
-                      <button 
-                        onClick={() => setShowUsagePage(true)}
-                        className={`text-sm font-medium transition-colors hover:scale-105 ${
-                          isDarkMode ? 'text-white hover:text-gray-300' : 'text-gray-600 hover:text-green-600'
-                        }`}
-                      >
-                        Usage
-                      </button>
                       <button 
                         onClick={() => setShowPricingModal(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
@@ -3190,14 +3289,6 @@ function App() {
                         Past Documents
                       </button>
                       <button 
-                        onClick={() => setShowUsagePage(true)}
-                        className={`text-sm font-medium transition-colors hover:scale-105 ${
-                          isDarkMode ? 'text-white hover:text-gray-300' : 'text-gray-600 hover:text-green-600'
-                        }`}
-                      >
-                        Usage
-                      </button>
-                      <button 
                         onClick={() => setShowSettingsPage(true)}
                         className={`text-sm font-medium transition-colors hover:scale-105 ${
                           isDarkMode ? 'text-white hover:text-gray-300' : 'text-gray-600 hover:text-green-600'
@@ -3209,13 +3300,18 @@ function App() {
                         onClick={async () => {
                           try {
                             await userService.signOut();
-                            // State will be updated by the auth listener
+                            // Reset view states to go back to landing page
+                            setShowSettingsPage(false);
+                            // Auth listener will handle the rest of the state updates
                           } catch (error) {
                             console.error('Sign out error:', error);
                             // Still update UI state if sign out fails
                             setIsSignedIn(false);
                             setIsAuthenticated(false);
                             setUserTier(undefined);
+                            setUserEmail(undefined);
+                            // Reset view states
+                            setShowSettingsPage(false);
                           }
                         }}
                         className="px-4 py-2 rounded-lg font-medium transition-all duration-200 bg-black border-2 border-white text-white hover:bg-gray-900 hover:scale-105"
@@ -3229,7 +3325,7 @@ function App() {
             </div>
           </div>
           
-          <div className="container mx-auto px-4 py-8 max-w-6xl">
+          <div className="container mx-auto px-4 pt-16 pb-8 max-w-6xl">
         {/* Header */}
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-6">
@@ -3316,7 +3412,7 @@ function App() {
 
         {/* Comparison Example */}
         {!allFilesUploaded && (
-          <div className="mb-12 max-w-3xl mx-auto">
+          <div className="mt-16 mb-12 max-w-3xl mx-auto">
             <div className={`rounded-xl p-6 border ${
               isDarkMode ? 'bg-black border-white' : 'bg-white border-gray-200'
             }`}>
@@ -3325,10 +3421,12 @@ function App() {
               </h3>
               <div className="space-y-3">
                 {[
-                  { category: 'Food & Dining', color: '#FF6B6B', stmt1: '$234.50', stmt2: '$189.23', icon: '🍽️' },
-                  { category: 'Groceries', color: '#4ECDC4', stmt1: '$456.78', stmt2: '$512.34', icon: '🛒' },
-                  { category: 'Gas & Transportation', color: '#45B7D1', stmt1: '$120.45', stmt2: '$98.67', icon: '🚗' },
-                ].map((item, i) => (
+                  { category: 'Food & Dining', color: '#FF6B6B', stmt1: '$234.50', stmt2: '$189.23', icon: Utensils },
+                  { category: 'Groceries', color: '#4ECDC4', stmt1: '$456.78', stmt2: '$512.34', icon: ShoppingBag },
+                  { category: 'Gas & Transportation', color: '#45B7D1', stmt1: '$120.45', stmt2: '$98.67', icon: Car },
+                ].map((item, i) => {
+                  const Icon = item.icon;
+                  return (
                   <div key={i} className={`flex items-center justify-between p-3 rounded-lg ${
                     isDarkMode ? 'bg-black border border-white' : 'bg-gray-50'
                   }`}>
@@ -3337,7 +3435,7 @@ function App() {
                         className="w-8 h-8 rounded-full flex items-center justify-center text-sm"
                         style={{ backgroundColor: item.color + '20' }}
                       >
-                        {item.icon}
+                        <Icon className="h-5 w-5" style={{ color: item.color }} />
                       </div>
                       <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
                         {item.category}
@@ -3353,7 +3451,8 @@ function App() {
                       </span>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
               <p className={`text-xs text-center mt-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>
                 Upload your statements to see real comparisons
@@ -3399,8 +3498,48 @@ function App() {
           </div>
         )}
 
+        {/* No Transactions Warning */}
+        {comparisonGenerated && parsedData.length > 0 && parsedData.every(data => data.transactions.length === 0) && (
+          <div className={`rounded-xl p-6 shadow-lg border mb-8 ${
+            isDarkMode 
+              ? 'bg-yellow-900/20 border-yellow-600' 
+              : 'bg-yellow-50 border-yellow-300'
+          }`}>
+            <div className="flex items-start gap-4">
+              <AlertCircle className={`h-6 w-6 flex-shrink-0 ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`} />
+              <div>
+                <h3 className={`text-lg font-semibold mb-2 ${isDarkMode ? 'text-yellow-400' : 'text-yellow-800'}`}>
+                  No Transactions Found
+                </h3>
+                <p className={`mb-3 ${isDarkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                  Your PDF files were processed successfully, but no transaction data could be extracted. This can happen if:
+                </p>
+                <ul className={`list-disc list-inside space-y-1 mb-3 ${isDarkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                  <li>The PDF is image-based (scanned) and OCR couldn't extract the data</li>
+                  <li>The PDF format is not yet supported by our parser</li>
+                  <li>The PDF doesn't contain standard transaction table structures</li>
+                </ul>
+                <p className={`text-sm mb-4 ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                  Please check your browser console (F12) for detailed logs, or try a different PDF format.
+                </p>
+                <button
+                  onClick={resetComparison}
+                  className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-yellow-600 hover:bg-yellow-700 text-white hover:scale-105' 
+                      : 'bg-yellow-600 hover:bg-yellow-700 text-white hover:scale-105'
+                  }`}
+                >
+                  <Upload className="h-5 w-5" />
+                  Try Different Files
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Overall Summary */}
-        {allFilesUploaded && comparisonGenerated && parsedData.length > 0 && (
+        {allFilesUploaded && comparisonGenerated && parsedData.length > 0 && parsedData.some(data => data.transactions.length > 0) && (
           <div className={`rounded-xl p-6 shadow-lg border mb-8 ${
             isDarkMode 
               ? 'bg-black border-white' 
@@ -3476,7 +3615,7 @@ function App() {
         )}
 
         {/* Category Selection */}
-        {allFilesUploaded && comparisonGenerated && (
+        {allFilesUploaded && comparisonGenerated && parsedData.some(data => data.transactions.length > 0) && (
           <div className={`rounded-xl p-6 shadow-lg border mb-8 ${
             isDarkMode 
               ? 'bg-black border-white' 
@@ -3490,76 +3629,6 @@ function App() {
               isDark={isDarkMode}
               statementNames={statementNames}
             />
-          </div>
-        )}
-
-        {/* Results */}
-        {comparisonResults && comparisonGenerated && (
-          <div className="space-y-6">
-            <ComparisonResults
-              data={comparisonResults}
-              statementNames={statementNames}
-              isPreview={false}
-              onUnlock={() => setShowPaywall(true)}
-              isDark={isDarkMode}
-            />
-
-            <div className={`rounded-xl p-6 shadow-lg border ${
-              isDarkMode 
-                ? 'bg-black border-white' 
-                : 'bg-white border-gray-100'
-            }`}>
-              <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-800'
-              }`}>
-                <Download className={`h-5 w-5 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
-                Export Options
-              </h3>
-              
-                                              <div className="flex flex-wrap gap-4 justify-center">
-                  <button
-                    onClick={exportToPDF}
-                    className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
-                      isDarkMode 
-                        ? 'bg-red-600 hover:bg-red-700 text-white' 
-                        : 'bg-red-600 hover:bg-red-700 text-white'
-                    }`}
-                  >
-                    <FileText className="h-5 w-5" />
-                    Export PDF Report
-                  </button>
-                  
-                  <button
-                    onClick={exportToCSV}
-                    className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
-                      isDarkMode 
-                        ? 'bg-green-600 hover:bg-green-700 text-white' 
-                        : 'bg-green-600 hover:bg-green-700 text-white'
-                    }`}
-                  >
-                    <Receipt className="h-5 w-5" />
-                    Export CSV Data
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-        )}
-        
-        {/* Compare More Documents Button - Outside Results Section */}
-        {comparisonResults && comparisonGenerated && (
-          <div className="mt-6 text-center">
-            <button
-              onClick={resetComparison}
-              className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium ${
-                isDarkMode 
-                  ? 'bg-green-600 hover:bg-green-700 text-white hover:scale-105' 
-                  : 'bg-green-600 hover:bg-green-700 text-white hover:scale-105'
-              }`}
-            >
-              <Upload className="h-5 w-5" />
-              Compare More Documents
-            </button>
           </div>
         )}
 
@@ -3600,17 +3669,39 @@ function App() {
           userTier={userTier}
           userEmail={userEmail}
         />
-      ) : showUsagePage ? (
-        <UsagePage
-          isVisible={showUsagePage}
-          onBack={() => setShowUsagePage(false)}
+      ) : showResultsPage && currentComparisonView ? (
+        <ComparisonResultsPage
+          isVisible={showResultsPage}
+          onBack={() => {
+            setShowResultsPage(false);
+            if (!currentComparisonView.isHistorical) {
+              resetComparison();
+            }
+            setCurrentComparisonView(null);
+          }}
           isDark={isDarkMode}
+          comparisonData={currentComparisonView.data}
+          statementNames={currentComparisonView.statementNames}
+          parsedData={currentComparisonView.parsedData}
+          comparisonDate={currentComparisonView.date}
+          isHistorical={currentComparisonView.isHistorical}
+          onExportPDF={!currentComparisonView.isHistorical ? exportToPDF : undefined}
+          onExportCSV={!currentComparisonView.isHistorical ? exportToCSV : undefined}
         />
       ) : showPastDocumentsPage ? (
         <PastDocumentsPage
           isVisible={showPastDocumentsPage}
           onBack={() => setShowPastDocumentsPage(false)}
           isDark={isDarkMode}
+          onViewDetails={(doc) => {
+            setCurrentComparisonView({
+              data: doc.results,
+              statementNames: [doc.statement1Name, doc.statement2Name],
+              date: doc.date,
+              isHistorical: true
+            });
+            setShowResultsPage(true);
+          }}
         />
       ) : (
         <PricingPage

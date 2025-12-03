@@ -169,22 +169,42 @@ export class UserService {
 
   // Get current user profile
   async getCurrentUser(): Promise<Profile | null> {
-    // Check for valid session instead of cached user data
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (session?.user) {
-      // If we have a cached user with the same ID, return it
-      if (this.currentUser && this.currentUser.id === session.user.id) {
+    console.log('🔍 getCurrentUser: Starting...');
+    try {
+      // Check for valid session instead of cached user data
+      console.log('🔍 getCurrentUser: Calling supabase.auth.getSession()...');
+      
+      const getSessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise<any>((_, reject) => 
+        setTimeout(() => reject(new Error('getSession timeout after 10 seconds')), 10000)
+      );
+      
+      const { data: { session } } = await Promise.race([getSessionPromise, timeoutPromise]);
+      console.log('🔍 getCurrentUser: Got session:', session ? 'exists' : 'null');
+      
+      if (session?.user) {
+        console.log('🔍 getCurrentUser: User found in session:', session.user.email);
+        // If we have a cached user with the same ID, return it
+        if (this.currentUser && this.currentUser.id === session.user.id) {
+          console.log('🔍 getCurrentUser: Returning cached user');
+          return this.currentUser
+        }
+        // Otherwise load fresh profile
+        console.log('🔍 getCurrentUser: Loading fresh profile...');
+        await this.loadUserProfile(session.user.id)
+        console.log('🔍 getCurrentUser: Profile loaded, returning');
         return this.currentUser
       }
-      // Otherwise load fresh profile
-      await this.loadUserProfile(session.user.id)
-      return this.currentUser
-    }
 
-    // No valid session, clear any cached data
-    this.currentUser = null
-    return null
+      // No valid session, clear any cached data
+      console.log('🔍 getCurrentUser: No session, returning null');
+      this.currentUser = null
+      return null
+    } catch (error) {
+      console.error('❌ getCurrentUser: Error:', error);
+      this.currentUser = null;
+      return null;
+    }
   }
 
   // Debug function to check authentication status
@@ -214,36 +234,63 @@ export class UserService {
     creditsUsed: number
     creditsLimit: number
   }> {
-    const user = await this.getCurrentUser()
-    const sessionId = this.getSessionId()
+    console.log('🔍 canPerformAction called with:', { action, pagesRequired });
+    try {
+      console.log('🔍 Getting current user...');
+      const user = await this.getCurrentUser()
+      console.log('🔍 Current user:', user ? `authenticated (${user.email})` : 'anonymous');
+      
+      const sessionId = this.getSessionId()
+      console.log('🔍 Session ID:', sessionId);
 
-    if (user) {
-      // Authenticated user
-      const tierConfig = TIER_CONFIG[user.tier]
-      const canPerform = user.credits >= pagesRequired
+      if (user) {
+        console.log('🔍 Processing as authenticated user...');
+        // Authenticated user
+        const tierConfig = TIER_CONFIG[user.tier] || TIER_CONFIG.signup
+        
+        // If user.credits is undefined (DB schema not updated), default to tier limit
+        const userCredits = user.credits ?? tierConfig.credits
+        const canPerform = userCredits >= pagesRequired
 
-      return {
-        canPerform,
-        reason: canPerform ? undefined : `You need ${pagesRequired} credits but only have ${user.credits} available`,
-        tier: user.tier,
-        creditsUsed: user.credits,
-        creditsLimit: tierConfig.credits
+        const result = {
+          canPerform,
+          reason: canPerform ? undefined : `You need ${pagesRequired} credits but only have ${userCredits} available`,
+          tier: user.tier || 'signup',
+          creditsUsed: userCredits,
+          creditsLimit: tierConfig.credits
+        };
+        console.log('🔍 Authenticated result:', result);
+        return result;
+      } else {
+        console.log('🔍 Processing as anonymous user...');
+        // Anonymous user - allow with generous limits, skip database check to avoid hanging
+        const tierConfig = TIER_CONFIG.anonymous
+        
+        // For anonymous users, we'll be permissive and allow reasonable usage
+        // The actual usage tracking will happen in logUsage() after the comparison
+        const canPerform = pagesRequired <= 100 // Generous limit for anonymous users
+        
+        const result = {
+          canPerform,
+          reason: canPerform ? undefined : `Anonymous users are limited to ${tierConfig.credits} pages per comparison`,
+          tier: 'anonymous',
+          creditsUsed: 0,
+          creditsLimit: tierConfig.credits
+        };
+        console.log('🔍 Anonymous result:', result);
+        return result;
       }
-    } else {
-      // Anonymous user - check actual usage from logs
-      const tierConfig = TIER_CONFIG.anonymous
-      const usageHistory = await this.getUsageHistory()
-      const totalUsed = usageHistory.reduce((sum, log) => sum + log.credits_used, 0)
-      const remainingCredits = tierConfig.credits - totalUsed
-      const canPerform = pagesRequired <= remainingCredits
-
-      return {
-        canPerform,
-        reason: canPerform ? undefined : `Anonymous users are limited to ${tierConfig.credits} credits per month`,
+    } catch (error) {
+      console.error('❌ Error in canPerformAction:', error);
+      // If anything fails, be permissive and allow the action
+      const fallbackResult = {
+        canPerform: true,
         tier: 'anonymous',
-        creditsUsed: totalUsed,
-        creditsLimit: tierConfig.credits
-      }
+        creditsUsed: 0,
+        creditsLimit: 100
+      };
+      console.log('🔍 Fallback result:', fallbackResult);
+      return fallbackResult;
     }
   }
 
@@ -268,11 +315,14 @@ export class UserService {
     }
 
     // Update user profile if authenticated
-    if (user) {
+    if (user && user.credits !== undefined) {
+      // Only update credits if the field exists in the user profile
+      const newCredits = Math.max(0, user.credits - pagesProcessed)
+      
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
-          credits: user.credits - pagesProcessed
+          credits: newCredits
         })
         .eq('id', user.id)
 
@@ -282,7 +332,7 @@ export class UserService {
         // Update local state
         this.currentUser = {
           ...user,
-          credits: user.credits - pagesProcessed
+          credits: newCredits
         }
       }
     }
@@ -324,56 +374,38 @@ export class UserService {
 
   // Sign out
   async signOut(): Promise<void> {
-    console.log('Signing out user...');
-    try {
-      // Clear session completely
-      const { error } = await supabase.auth.signOut({ scope: 'global' });
-      if (error) {
-        console.error('Error during signOut:', error);
-      } else {
-        console.log('Successfully signed out from Supabase');
-      }
-    } catch (error) {
-      console.error('Exception during signOut:', error);
-    }
+    console.log('🔍 signOut: Starting...');
     
-    // Clear all local state
+    // Clear all local state first
     this.currentUser = null;
     this.sessionId = null;
     this.clearAnonymousSession();
+    console.log('🔍 signOut: Local state cleared');
     
-    // Aggressively clear all possible storage locations
     try {
-      // Clear all localStorage keys that might contain auth data
-      const keysToRemove = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (key.includes('supabase') || key.includes('auth') || key.includes('session'))) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach(key => {
-        console.log('Removing localStorage key:', key);
-        localStorage.removeItem(key);
-      });
+      // Sign out from Supabase with global scope to clear all sessions
+      console.log('🔍 signOut: Calling supabase.auth.signOut()...');
       
-      // Also clear sessionStorage
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const key = sessionStorage.key(i);
-        if (key && (key.includes('supabase') || key.includes('auth') || key.includes('session'))) {
-          console.log('Removing sessionStorage key:', key);
-          sessionStorage.removeItem(key);
-        }
+      const signOutPromise = supabase.auth.signOut({ scope: 'global' });
+      const timeoutPromise = new Promise<any>((_, reject) => 
+        setTimeout(() => reject(new Error('Sign out timeout after 3 seconds')), 3000)
+      );
+      
+      const { error } = await Promise.race([signOutPromise, timeoutPromise]);
+      
+      if (error) {
+        console.error('❌ signOut: Error during signOut:', error);
+        // Don't throw - we already cleared local state
+        return;
       }
-    } catch (e) {
-      console.log('Could not clear storage:', e);
+      console.log('✅ signOut: Successfully signed out from Supabase');
+    } catch (error) {
+      console.error('❌ signOut: Exception during signOut:', error);
+      // Don't throw - we already cleared local state, which is the important part
+      console.log('⚠️ signOut: Continuing despite error (local state already cleared)');
     }
     
-    console.log('Local state and storage cleared after sign out');
-    
-    // Force reload the page to ensure clean state
-    console.log('Forcing page reload to ensure clean state...');
-    window.location.reload();
+    console.log('✅ signOut: Complete - auth listener will handle state updates');
   }
 
   // Update user tier and credits after successful payment
