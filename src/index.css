@@ -1,3 +1,36 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Animated border wrapper for loading state */
+.animate-border-wrapper {
+  position: relative;
+  display: inline-block;
+  padding: 3px;
+  border-radius: 16px;
+  background: linear-gradient(90deg, transparent, transparent);
+  overflow: hidden;
+}
+
+.animate-border-wrapper::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg, transparent 0%, white 10%, transparent 20%);
+  transform: translate(-50%, -50%);
+  animation: border-spin 1.5s linear infinite;
+}
+
+.animate-border-wrapper > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes border-spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}

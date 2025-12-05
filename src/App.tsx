@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, Eye, Target, TrendingDown, X } from 'lucide-react';
+import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, Eye, Target, TrendingDown, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 import { userService } from './lib/userService';
@@ -51,6 +51,14 @@ const categories = [
   { id: 'health', name: 'Health & Fitness', icon: Activity, color: '#54A0FF', keywords: ['gym', 'health', 'medical', 'pharmacy', 'fitness', 'doctor', 'planet fitness', 'fitness center', 'workout'] },
   { id: 'income', name: 'Income', icon: DollarSign, color: '#00D4AA', keywords: ['salary', 'deposit', 'payment', 'income', 'payroll', 'direct deposit'] }
 ];
+
+// Helper to clean up transaction descriptions
+const cleanDescription = (description: string): string => {
+  return description
+    .replace(/Purchase authorized on \d{2}\/\d{2}\s*/gi, '')
+    .replace(/Purchase authorized on\s*/gi, '')
+    .trim();
+};
 
 class BankStatementParser {
   private categoryKeywords: { [key: string]: string[] };
@@ -854,7 +862,7 @@ function CategorySelector({
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
                                 <div className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                                  {transaction.description}
+                                  {cleanDescription(transaction.description)}
                                 </div>
                                 <div className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                   {transaction.date}
@@ -889,133 +897,801 @@ function CategorySelector({
   );
 }
 
+function CategoryDetailModal({
+  isOpen,
+  onClose,
+  categoryId,
+  isDark,
+  parsedData,
+  statementNames,
+  onTransactionUpdate
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  categoryId: string;
+  isDark: boolean;
+  parsedData: ParsedStatement[];
+  statementNames: string[];
+  onTransactionUpdate?: (statementIndex: number, transactions: Transaction[]) => void;
+}) {
+  const [editingTransaction, setEditingTransaction] = useState<{ statementIndex: number; transactionId: string } | null>(null);
+  const [localTransactions, setLocalTransactions] = useState<Transaction[][]>([]);
+
+  const category = categories.find(c => c.id === categoryId);
+  const Icon = category?.icon || BarChart3;
+
+  // Initialize local transactions when modal opens
+  useEffect(() => {
+    if (isOpen && parsedData) {
+      setLocalTransactions(parsedData.map(pd => 
+        pd.transactions.filter(t => t.category === categoryId)
+      ));
+    }
+  }, [isOpen, parsedData, categoryId]);
+
+  if (!isOpen || !category) return null;
+
+  const handleEditTransaction = (statementIndex: number, transactionId: string, updates: Partial<Transaction>) => {
+    setLocalTransactions(prev => {
+      const newTransactions = [...prev];
+      newTransactions[statementIndex] = newTransactions[statementIndex].map(t => 
+        t.id === transactionId ? { ...t, ...updates } : t
+      );
+      return newTransactions;
+    });
+    setEditingTransaction(null);
+  };
+
+  const handleDeleteTransaction = (statementIndex: number, transactionId: string) => {
+    setLocalTransactions(prev => {
+      const newTransactions = [...prev];
+      newTransactions[statementIndex] = newTransactions[statementIndex].filter(t => t.id !== transactionId);
+      return newTransactions;
+    });
+  };
+
+  const handleAddTransaction = (statementIndex: number) => {
+    const newTransaction: Transaction = {
+      id: `new-${Date.now()}-${statementIndex}`,
+      date: '',
+      description: 'New Transaction',
+      amount: 0,
+      category: categoryId,
+      type: 'withdrawal'
+    };
+    setLocalTransactions(prev => {
+      const newTransactions = [...prev];
+      newTransactions[statementIndex] = [newTransaction, ...newTransactions[statementIndex]];
+      return newTransactions;
+    });
+    setEditingTransaction({ statementIndex, transactionId: newTransaction.id });
+  };
+
+  const handleSaveAll = () => {
+    if (onTransactionUpdate) {
+      localTransactions.forEach((transactions, index) => {
+        // Get all transactions for this statement, update the category ones
+        const allTransactions = parsedData[index].transactions.filter(t => t.category !== categoryId);
+        onTransactionUpdate(index, [...allTransactions, ...transactions]);
+      });
+    }
+    onClose();
+  };
+
+  const getTotalForStatement = (statementIndex: number) => {
+    return localTransactions[statementIndex]?.reduce((sum, t) => sum + t.amount, 0) || 0;
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4">
+      {/* Backdrop */}
+      <div 
+        className="fixed inset-0 bg-black/80 backdrop-blur-md"
+        onClick={onClose}
+      />
+      
+      {/* Modal */}
+      <div className={`relative z-[101] w-full max-w-4xl max-h-[80vh] overflow-hidden rounded-xl shadow-2xl border-2 ${
+        isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
+      }`}>
+        {/* Header */}
+        <div className={`sticky top-0 z-10 px-4 py-3 border-b-2 ${
+          isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div 
+                className="p-2 rounded-full"
+                style={{ backgroundColor: category.color + '20' }}
+              >
+                <Icon className="h-5 w-5" style={{ color: category.color }} />
+              </div>
+              <div>
+                <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {category.name}
+                </h2>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {localTransactions.flat().length} total transactions
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className={`p-1.5 rounded-lg transition-colors ${
+                isDark ? 'hover:bg-gray-900 text-gray-400' : 'hover:bg-gray-100 text-gray-600'
+              }`}
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="overflow-y-auto max-h-[calc(80vh-110px)] p-4">
+          <div className={`grid gap-4 ${parsedData.length === 2 ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
+            {parsedData.map((_, statementIndex) => (
+              <div key={statementIndex} className={`rounded-xl border-2 overflow-hidden ${
+                isDark ? 'bg-black border-white' : 'bg-gray-50 border-gray-200'
+              }`}>
+                {/* Statement Header */}
+                <div className={`px-3 py-2 border-b ${
+                  isDark ? 'bg-black border-white' : 'bg-gray-100 border-gray-200'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {statementNames[statementIndex] || `Statement ${statementIndex + 1}`}
+                      </h3>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {localTransactions[statementIndex]?.length || 0} transactions
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total</p>
+                      <p className={`text-base font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                        ${getTotalForStatement(statementIndex).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Add Transaction Button */}
+                <div className="px-3 py-1.5">
+                  <button
+                    onClick={() => handleAddTransaction(statementIndex)}
+                    className={`w-full py-1.5 px-3 rounded-lg border-2 border-dashed transition-colors flex items-center justify-center gap-1.5 text-sm ${
+                      isDark 
+                        ? 'border-white/40 text-gray-400 hover:border-green-500 hover:text-green-400' 
+                        : 'border-gray-300 text-gray-500 hover:border-green-500 hover:text-green-600'
+                    }`}
+                  >
+                    <span>+</span>
+                    Add Transaction
+                  </button>
+                </div>
+
+                {/* Transactions List */}
+                <div className="px-3 pb-3 space-y-1.5 max-h-[280px] overflow-y-auto">
+                  {localTransactions[statementIndex]?.length > 0 ? (
+                    localTransactions[statementIndex].map((transaction) => (
+                      <div key={transaction.id} className={`rounded-lg border ${
+                        isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
+                      }`}>
+                        {editingTransaction?.statementIndex === statementIndex && 
+                         editingTransaction?.transactionId === transaction.id ? (
+                          // Edit Form
+                          <div className="p-4">
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                              <div>
+                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                  Date
+                                </label>
+                                <input
+                                  type="text"
+                                  defaultValue={transaction.date}
+                                  className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                                    isDark 
+                                      ? 'bg-black border-white text-white' 
+                                      : 'bg-white border-gray-300 text-gray-900'
+                                  }`}
+                                  placeholder="MM/DD"
+                                  id={`date-${transaction.id}`}
+                                />
+                              </div>
+                              <div>
+                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                  Amount
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  defaultValue={transaction.amount}
+                                  className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                                    isDark 
+                                      ? 'bg-black border-white text-white' 
+                                      : 'bg-white border-gray-300 text-gray-900'
+                                  }`}
+                                  placeholder="0.00"
+                                  id={`amount-${transaction.id}`}
+                                />
+                              </div>
+                            </div>
+                            <div className="mb-3">
+                              <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                Description
+                              </label>
+                              <input
+                                type="text"
+                                defaultValue={cleanDescription(transaction.description)}
+                                className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                                  isDark 
+                                    ? 'bg-black border-white text-white' 
+                                    : 'bg-white border-gray-300 text-gray-900'
+                                }`}
+                                placeholder="Transaction description"
+                                id={`desc-${transaction.id}`}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                              <div>
+                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                  Category
+                                </label>
+                                <select
+                                  defaultValue={transaction.category}
+                                  className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                                    isDark 
+                                      ? 'bg-black border-white text-white' 
+                                      : 'bg-white border-gray-300 text-gray-900'
+                                  }`}
+                                  id={`cat-${transaction.id}`}
+                                >
+                                  {categories.map(cat => (
+                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                  Type
+                                </label>
+                                <select
+                                  defaultValue={transaction.type}
+                                  className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                                    isDark 
+                                      ? 'bg-black border-white text-white' 
+                                      : 'bg-white border-gray-300 text-gray-900'
+                                  }`}
+                                  id={`type-${transaction.id}`}
+                                >
+                                  <option value="withdrawal">Withdrawal</option>
+                                  <option value="deposit">Deposit</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                onClick={() => handleDeleteTransaction(statementIndex, transaction.id)}
+                                className="px-3 py-1.5 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                onClick={() => setEditingTransaction(null)}
+                                className={`px-3 py-1.5 text-sm rounded-lg ${
+                                  isDark ? 'bg-black border border-white hover:bg-gray-900 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                                }`}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const dateEl = document.getElementById(`date-${transaction.id}`) as HTMLInputElement;
+                                  const amountEl = document.getElementById(`amount-${transaction.id}`) as HTMLInputElement;
+                                  const descEl = document.getElementById(`desc-${transaction.id}`) as HTMLInputElement;
+                                  const catEl = document.getElementById(`cat-${transaction.id}`) as HTMLSelectElement;
+                                  const typeEl = document.getElementById(`type-${transaction.id}`) as HTMLSelectElement;
+                                  
+                                  handleEditTransaction(statementIndex, transaction.id, {
+                                    date: dateEl.value,
+                                    amount: parseFloat(amountEl.value) || 0,
+                                    description: descEl.value,
+                                    category: catEl.value,
+                                    type: typeEl.value as 'withdrawal' | 'deposit'
+                                  });
+                                }}
+                                className="px-3 py-1.5 text-sm rounded-lg bg-green-600 hover:bg-green-700 text-white"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          // Display View
+                          <div 
+                            className="p-3 cursor-pointer hover:bg-opacity-50 transition-colors"
+                            onClick={() => setEditingTransaction({ statementIndex, transactionId: transaction.id })}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1 min-w-0">
+                                <p className={`font-medium truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                  {cleanDescription(transaction.description)}
+                                </p>
+                                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                  {transaction.date}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 ml-3">
+                                <span className={`font-semibold ${
+                                  transaction.type === 'withdrawal' 
+                                    ? isDark ? 'text-red-400' : 'text-red-600'
+                                    : isDark ? 'text-green-400' : 'text-green-600'
+                                }`}>
+                                  {transaction.type === 'withdrawal' ? '-' : '+'}${transaction.amount.toFixed(2)}
+                                </span>
+                                <Edit3 className={`h-4 w-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className={`text-center py-4 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                      No transactions in this category
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className={`sticky bottom-0 px-4 py-3 border-t-2 ${
+          isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
+        }`}>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={onClose}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                isDark 
+                  ? 'bg-black hover:bg-gray-900 text-white border-2 border-white' 
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+              }`}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveAll}
+              className="px-4 py-2 rounded-lg font-medium text-sm bg-green-600 hover:bg-green-700 text-white"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ComparisonResults({ 
   data, 
   statementNames,
   isPreview = false,
   onUnlock,
-  isDark
+  isDark,
+  parsedData,
+  onStatementNameChange,
+  onTransactionUpdate
 }: {
   data: { [key: string]: ComparisonResult };
   statementNames: string[];
   isPreview?: boolean;
   onUnlock?: () => void;
   isDark: boolean;
+  parsedData?: ParsedStatement[];
+  onStatementNameChange?: (index: number, newName: string) => void;
+  onTransactionUpdate?: (statementIndex: number, transactions: Transaction[]) => void;
 }) {
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'amount' | 'alphabetical'>('amount');
+  const [showPercentage, setShowPercentage] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<{ table: 'spending' | 'income', index: number } | null>(null);
+  
   const previewData = isPreview ? Object.fromEntries(Object.entries(data).slice(0, 2)) : data;
+
+  // Separate income from spending
+  const incomeEntry = Object.entries(previewData).find(([id]) => id === 'income');
+  const spendingEntries = Object.entries(previewData).filter(([id]) => id !== 'income');
+
+  // Calculate spending totals (excluding income) for percentage display
+  const spendingTotals = statementNames.map((_, index) => 
+    spendingEntries.reduce((sum, [, result]) => sum + (result.statementValues[index] || 0), 0)
+  );
+
+  // Calculate income totals for percentage display
+  const incomeTotals = statementNames.map((_, index) => 
+    incomeEntry ? (incomeEntry[1].statementValues[index] || 0) : 0
+  );
+
+  // Sort the spending data
+  const sortedSpendingEntries = spendingEntries.sort(([aId, aResult], [bId, bResult]) => {
+    if (sortBy === 'alphabetical') {
+      const aName = categories.find(c => c.id === aId)?.name || '';
+      const bName = categories.find(c => c.id === bId)?.name || '';
+      return aName.localeCompare(bName);
+    } else {
+      // Sort by total amount (sum across all statements)
+      const aTotal = aResult.statementValues.reduce((sum, val) => sum + val, 0);
+      const bTotal = bResult.statementValues.reduce((sum, val) => sum + val, 0);
+      return bTotal - aTotal; // Descending order
+    }
+  });
+
+  // Calculate sorted column values for spending (for rank-based color scale per column)
+  const spendingColumnSortedValues = statementNames.map((_, colIndex) => {
+    const columnValues = spendingEntries.map(([, result]) => result.statementValues[colIndex] || 0);
+    // Sort descending so highest value = rank 0 (darkest)
+    return [...columnValues].sort((a, b) => b - a);
+  });
+
+  // Calculate sorted column values for income
+  const incomeColumnSortedValues = statementNames.map((_, colIndex) => {
+    const value = incomeEntry ? (incomeEntry[1].statementValues[colIndex] || 0) : 0;
+    return [value];
+  });
+
+  // Reusable row renderer
+  const renderCategoryRow = (categoryId: string, result: ComparisonResult, totalsForPercentage: number[], columnSortedValues: number[][]) => {
+    const category = categories.find(c => c.id === categoryId);
+    const Icon = category?.icon || BarChart3;
+    const hasTransactions = parsedData && parsedData.some(pd => 
+      pd.transactions.some(t => t.category === categoryId)
+    );
+    
+    // Get transaction counts per statement
+    const transactionCountsPerStatement = parsedData?.map(pd => 
+      pd.transactions.filter(t => t.category === categoryId).length
+    ) || [];
+    
+    return (
+      <tr 
+        key={categoryId}
+        className={`border-b ${isDark ? 'border-white' : 'border-gray-200'} ${hasTransactions ? 'cursor-pointer' : ''}`}
+        onClick={() => hasTransactions && setSelectedCategory(categoryId)}
+      >
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-3">
+            <div 
+              className="p-2 rounded-full"
+              style={{ backgroundColor: category?.color + '20' }}
+            >
+              <Icon 
+                className="h-4 w-4" 
+                style={{ color: category?.color }}
+              />
+            </div>
+            <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+              {category?.name}
+            </span>
+          </div>
+        </td>
+        {result.statementValues.map((value, index) => {
+          const percentage = totalsForPercentage[index] > 0 ? (value / totalsForPercentage[index]) * 100 : 0;
+          const transactionCount = transactionCountsPerStatement[index] || 0;
+          
+          // Calculate green intensity based on RANK position in this column (not numerical value)
+          const sortedValues = columnSortedValues[index];
+          const rank = sortedValues.findIndex(v => v === value); // 0 = highest value
+          const totalItems = sortedValues.length;
+          // intensity: 1 = darkest (highest rank), 0 = lightest (lowest rank)
+          const intensity = totalItems > 1 ? 1 - (rank / (totalItems - 1)) : 0.5;
+          
+          // Monochromatic green scale with smooth gradient: higher rank = darker green
+          // Using inline styles for truly gradual color transitions
+          const getGreenColor = () => {
+            const maxVal = sortedValues[0] || 0;
+            if (maxVal === 0) return isDark ? 'rgb(156, 163, 175)' : 'rgb(107, 114, 128)'; // gray-400/500
+            
+            // Smooth interpolation between light and dark green
+            // Dark mode: from green-700 (21, 128, 61) to green-300 (134, 239, 172)
+            // Light mode: from green-300 (134, 239, 172) to green-800 (22, 101, 52)
+            if (isDark) {
+              const r = Math.round(21 + (134 - 21) * intensity);
+              const g = Math.round(128 + (239 - 128) * intensity);
+              const b = Math.round(61 + (172 - 61) * intensity);
+              return `rgb(${r}, ${g}, ${b})`;
+            } else {
+              const r = Math.round(134 + (22 - 134) * intensity);
+              const g = Math.round(239 + (101 - 239) * intensity);
+              const b = Math.round(172 + (52 - 172) * intensity);
+              return `rgb(${r}, ${g}, ${b})`;
+            }
+          };
+          
+          return (
+            <td key={index} className="py-3 px-4 text-right">
+              <div className="flex items-center justify-end gap-2">
+                <span className="font-semibold" style={{ color: getGreenColor() }}>
+                  {showPercentage ? `${percentage.toFixed(1)}%` : `$${value.toFixed(2)}`}
+                </span>
+                {transactionCount > 0 && (
+                  <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                    ({transactionCount})
+                  </span>
+                )}
+              </div>
+            </td>
+          );
+        })}
+      </tr>
+    );
+  };
 
   return (
     <div className="space-y-6">
+      {/* Spending Section */}
       <div className={`rounded-xl p-6 shadow-lg border ${
         isDark 
           ? 'bg-black border-white' 
           : 'bg-white border-gray-100'
       }`}>
-        <h3 className={`text-xl font-bold mb-4 flex items-center gap-2 ${
-          isDark ? 'text-gray-200' : 'text-gray-800'
-        }`}>
-          <BarChart3 className={`h-6 w-6 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
-          Spending Comparison Results
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h3 className={`text-xl font-bold ${
+            isDark ? 'text-gray-200' : 'text-gray-800'
+          }`}>
+            Spending
+          </h3>
+          
+          {/* Controls */}
+          <div className="flex items-center gap-4">
+            {/* Sort dropdown */}
+            <div className="flex items-center gap-2">
+              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Sort:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'amount' | 'alphabetical')}
+                className={`text-sm px-3 py-1.5 rounded-lg border ${
+                  isDark 
+                    ? 'bg-black border-white text-white' 
+                    : 'bg-white border-gray-300 text-gray-800'
+                }`}
+              >
+                <option value="amount">By Amount</option>
+                <option value="alphabetical">A-Z</option>
+              </select>
+            </div>
+            
+            {/* $ vs % toggle */}
+            <div className="flex items-center gap-2">
+              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Show:</span>
+              <div className={`flex rounded-lg border overflow-hidden ${isDark ? 'border-white' : 'border-gray-300'}`}>
+                <button
+                  onClick={() => setShowPercentage(false)}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                    !showPercentage 
+                      ? isDark ? 'bg-white text-black' : 'bg-gray-800 text-white'
+                      : isDark ? 'bg-black text-white' : 'bg-white text-gray-800'
+                  }`}
+                >
+                  $
+                </button>
+                <button
+                  onClick={() => setShowPercentage(true)}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                    showPercentage 
+                      ? isDark ? 'bg-white text-black' : 'bg-gray-800 text-white'
+                      : isDark ? 'bg-black text-white' : 'bg-white text-gray-800'
+                  }`}
+                >
+                  %
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
 
-        {/* Comparison Matrix/Grid */}
+        {/* Spending Table */}
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className={`border-b-2 ${isDark ? 'border-white' : 'border-gray-300'}`}>
-                <th className={`text-left py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                <th className={`text-left py-3 px-4 font-semibold w-1/3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                   Category
                 </th>
                 {statementNames.map((name, index) => (
-                  <th key={index} className={`text-right py-3 px-4 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    {name || `Statement ${index + 1}`}
+                  <th key={index} className={`text-right py-3 px-4 font-semibold w-1/3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {editingIndex?.table === 'spending' && editingIndex?.index === index && onStatementNameChange ? (
+                      <input
+                        type="text"
+                        defaultValue={name || `Statement ${index + 1}`}
+                        className={`text-right font-semibold bg-transparent border-b-2 outline-none w-full ${
+                          isDark ? 'border-white text-gray-300' : 'border-gray-800 text-gray-700'
+                        }`}
+                        autoFocus
+                        onBlur={(e) => {
+                          onStatementNameChange(index, e.target.value);
+                          setEditingIndex(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            onStatementNameChange(index, e.currentTarget.value);
+                            setEditingIndex(null);
+                          }
+                          if (e.key === 'Escape') {
+                            setEditingIndex(null);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span 
+                        className={onStatementNameChange ? 'cursor-pointer hover:underline' : ''}
+                        onClick={(e) => {
+                          if (onStatementNameChange) {
+                            e.stopPropagation();
+                            setEditingIndex({ table: 'spending', index });
+                          }
+                        }}
+                      >
+                        {name || `Statement ${index + 1}`}
+                      </span>
+                    )}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {Object.entries(previewData).map(([categoryId, result]) => {
-            const category = categories.find(c => c.id === categoryId);
-            const Icon = category?.icon || BarChart3;
-            
-            return (
-                  <tr key={categoryId} className={`border-b ${isDark ? 'border-white' : 'border-gray-200'}`}>
-                    <td className="py-3 px-4">
-                <div className="flex items-center gap-3">
-                  <div 
-                    className="p-2 rounded-full"
-                    style={{ backgroundColor: category?.color + '20' }}
-                  >
-                    <Icon 
-                            className="h-4 w-4" 
-                      style={{ color: category?.color }}
-                    />
-                  </div>
-                    <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                      {category?.name}
+              {sortedSpendingEntries.map(([categoryId, result]) => 
+                renderCategoryRow(categoryId, result, spendingTotals, spendingColumnSortedValues)
+              )}
+              {/* Total Spending Row */}
+              <tr className={`border-t-2 ${isDark ? 'border-white' : 'border-gray-300'}`}>
+                <td className="py-3 px-4">
+                  <span className={`font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                    Total Spending
+                  </span>
+                </td>
+                {spendingTotals.map((total, index) => (
+                  <td key={index} className="py-3 px-4 text-right">
+                    <span className={`font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                      ${total.toFixed(2)}
                     </span>
-                  </div>
-                    </td>
-                    {result.statementValues.map((value, index) => {
-                      const isMin = index === result.minIndex && result.statementValues.length > 1 && Math.max(...result.statementValues) > 0;
-                      const isMax = index === result.maxIndex && result.statementValues.length > 1 && Math.max(...result.statementValues) > 0;
-                      
-                      return (
-                        <td key={index} className="py-3 px-4 text-right">
-                          <span className={`font-semibold ${
-                            isMin 
-                              ? isDark ? 'text-green-400' : 'text-green-600'
-                              : isMax 
-                                ? isDark ? 'text-red-400' : 'text-red-600'
-                                : isDark ? 'text-gray-300' : 'text-gray-700'
-                          }`}>
-                            ${value.toFixed(2)}
-                    </span>
-                        </td>
-            );
-          })}
-                  </tr>
-                );
-              })}
+                  </td>
+                ))}
+              </tr>
             </tbody>
           </table>
         </div>
 
-        {/* Legend */}
-        <div className={`mt-4 p-3 rounded-lg ${isDark ? 'bg-black border border-white' : 'bg-gray-100'}`}>
-          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            <span className={isDark ? 'text-green-400 font-semibold' : 'text-green-600 font-semibold'}>Green</span> = Lowest spending in category • <span className={isDark ? 'text-red-400 font-semibold' : 'text-red-600 font-semibold'}>Red</span> = Highest spending in category
-          </p>
-        </div>
-
-        {isPreview && Object.keys(data).length > 2 && (
-          <div className={`mt-6 p-6 rounded-lg border ${
-            isDark 
-              ? 'bg-gradient-to-r from-green-900/20 to-emerald-900/20 border-green-700/50' 
-              : 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
-          }`}>
-            <div className="text-center">
-              <div className={`text-lg font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                Want to see all {Object.keys(data).length} categories?
-              </div>
-              <div className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                Unlock detailed breakdown, charts, and export options for just $9
-              </div>
-              <button
-                onClick={onUnlock}
-                className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium ${
-                  isDark 
-                    ? 'bg-green-600 hover:bg-green-700 text-white' 
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                }`}
-              >
-                <CreditCard className="h-5 w-5" />
-                Unlock Full Results - $9
-              </button>
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Income Section */}
+      {incomeEntry && (
+        <div className={`rounded-xl p-6 shadow-lg border ${
+          isDark 
+            ? 'bg-black border-white' 
+            : 'bg-white border-gray-100'
+        }`}>
+          <h3 className={`text-xl font-bold mb-4 ${
+            isDark ? 'text-gray-200' : 'text-gray-800'
+          }`}>
+            Income
+          </h3>
+
+          {/* Income Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className={`border-b-2 ${isDark ? 'border-white' : 'border-gray-300'}`}>
+                  <th className={`text-left py-3 px-4 font-semibold w-1/3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Category
+                  </th>
+                  {statementNames.map((name, index) => (
+                    <th key={index} className={`text-right py-3 px-4 font-semibold w-1/3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      {editingIndex?.table === 'income' && editingIndex?.index === index && onStatementNameChange ? (
+                        <input
+                          type="text"
+                          defaultValue={name || `Statement ${index + 1}`}
+                          className={`text-right font-semibold bg-transparent border-b-2 outline-none w-full ${
+                            isDark ? 'border-white text-gray-300' : 'border-gray-800 text-gray-700'
+                          }`}
+                          autoFocus
+                          onBlur={(e) => {
+                            onStatementNameChange(index, e.target.value);
+                            setEditingIndex(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              onStatementNameChange(index, e.currentTarget.value);
+                              setEditingIndex(null);
+                            }
+                            if (e.key === 'Escape') {
+                              setEditingIndex(null);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span 
+                          className={onStatementNameChange ? 'cursor-pointer hover:underline' : ''}
+                          onClick={(e) => {
+                            if (onStatementNameChange) {
+                              e.stopPropagation();
+                              setEditingIndex({ table: 'income', index });
+                            }
+                          }}
+                        >
+                          {name || `Statement ${index + 1}`}
+                        </span>
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {renderCategoryRow(incomeEntry[0], incomeEntry[1], incomeTotals, incomeColumnSortedValues)}
+                {/* Total Income Row */}
+                <tr className={`border-t-2 ${isDark ? 'border-white' : 'border-gray-300'}`}>
+                  <td className="py-3 px-4">
+                    <span className={`font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                      Total Income
+                    </span>
+                  </td>
+                  {incomeTotals.map((total, index) => (
+                    <td key={index} className="py-3 px-4 text-right">
+                      <span className={`font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                        ${total.toFixed(2)}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      )}
+
+      {isPreview && Object.keys(data).length > 2 && (
+        <div className={`rounded-xl p-6 shadow-lg border ${
+          isDark 
+            ? 'bg-gradient-to-r from-green-900/20 to-emerald-900/20 border-green-700/50' 
+            : 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
+        }`}>
+          <div className="text-center">
+            <div className={`text-lg font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+              Want to see all {Object.keys(data).length} categories?
+            </div>
+            <div className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              Unlock detailed breakdown, charts, and export options for just $9
+            </div>
+            <button
+              onClick={onUnlock}
+              className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium ${
+                isDark 
+                  ? 'bg-green-600 hover:bg-green-700 text-white' 
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              }`}
+            >
+              <CreditCard className="h-5 w-5" />
+              Unlock Full Results - $9
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Category Detail Modal */}
+      {selectedCategory && parsedData && (
+        <CategoryDetailModal
+          isOpen={!!selectedCategory}
+          onClose={() => setSelectedCategory(null)}
+          categoryId={selectedCategory}
+          isDark={isDark}
+          parsedData={parsedData}
+          statementNames={statementNames}
+          onTransactionUpdate={onTransactionUpdate}
+        />
+      )}
     </div>
   );
 }
@@ -2151,7 +2827,8 @@ function ComparisonResultsPage({
   comparisonDate,
   isHistorical = false,
   onExportPDF,
-  onExportCSV
+  onExportCSV,
+  onStatementNameChange
 }: {
   isVisible: boolean;
   onBack: () => void;
@@ -2163,6 +2840,7 @@ function ComparisonResultsPage({
   isHistorical?: boolean;
   onExportPDF?: () => void;
   onExportCSV?: () => void;
+  onStatementNameChange?: (index: number, newName: string) => void;
 }) {
   if (!isVisible || !comparisonData) return null;
 
@@ -2211,45 +2889,36 @@ function ComparisonResultsPage({
           statementNames={statementNames}
           isPreview={false}
           isDark={isDark}
+          parsedData={parsedData}
+          onStatementNameChange={onStatementNameChange}
         />
 
         {/* Export Options */}
         {onExportPDF && onExportCSV && (
-          <div className={`rounded-xl p-6 shadow-lg border mt-6 ${
-            isDark ? 'bg-black border-white' : 'bg-white border-gray-100'
-          }`}>
-            <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
-              isDark ? 'text-white' : 'text-gray-800'
-            }`}>
-              <Download className={`h-5 w-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
-              Export Options
-            </h3>
+          <div className="flex flex-wrap gap-4 justify-center mt-6">
+            <button
+              onClick={onExportPDF}
+              className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
+                isDark 
+                  ? 'bg-red-600 hover:bg-red-700 text-white' 
+                  : 'bg-red-600 hover:bg-red-700 text-white'
+              }`}
+            >
+              <FileText className="h-5 w-5" />
+              Export PDF Report
+            </button>
             
-            <div className="flex flex-wrap gap-4 justify-center">
-              <button
-                onClick={onExportPDF}
-                className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
-                  isDark 
-                    ? 'bg-red-600 hover:bg-red-700 text-white' 
-                    : 'bg-red-600 hover:bg-red-700 text-white'
-                }`}
-              >
-                <FileText className="h-5 w-5" />
-                Export PDF Report
-              </button>
-              
-              <button
-                onClick={onExportCSV}
-                className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
-                  isDark 
-                    ? 'bg-green-600 hover:bg-green-700 text-white' 
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                }`}
-              >
-                <Receipt className="h-5 w-5" />
-                Export CSV Data
-              </button>
-            </div>
+            <button
+              onClick={onExportCSV}
+              className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
+                isDark 
+                  ? 'bg-green-600 hover:bg-green-700 text-white' 
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              }`}
+            >
+              <Receipt className="h-5 w-5" />
+              Export CSV Data
+            </button>
           </div>
         )}
       </div>
@@ -2361,7 +3030,7 @@ function TransactionEditor({
                     </span>
                   </div>
                   <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    {transaction.description}
+                    {cleanDescription(transaction.description)}
                   </div>
                   <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                     {transaction.date}
@@ -2424,7 +3093,7 @@ function TransactionEditForm({
 }) {
   const [formData, setFormData] = useState({
     date: transaction.date,
-    description: transaction.description,
+    description: cleanDescription(transaction.description),
     amount: transaction.amount,
     category: transaction.category,
     type: transaction.type
@@ -2758,7 +3427,7 @@ function App() {
     setUploading(prev => [...prev, ...pdfFiles.map(() => false)]);
     setStatementNames(prev => [
       ...prev,
-      ...pdfFiles.map((file, index) => `Statement ${prev.length + index + 1}`)
+      ...pdfFiles.map((file) => file.name.replace(/\.pdf$/i, ''))
     ]);
     setComparisonGenerated(false);
     setComparisonResults(null);
@@ -3139,7 +3808,7 @@ function App() {
       const row = [
         transaction.statement,
         category,
-        `"${transaction.description.replace(/"/g, '""')}"`, // Escape quotes in CSV
+        `"${cleanDescription(transaction.description).replace(/"/g, '""')}"`, // Escape quotes in CSV
         transaction.date,
         transaction.amount.toFixed(2),
         transaction.type
@@ -3397,7 +4066,7 @@ function App() {
         </div>
 
         {/* File Upload Section */}
-        <div className="mb-8">
+        <div className="mb-8 max-w-4xl mx-auto">
           <MultiFileUploadZone
             files={files}
             parsedData={parsedData}
@@ -3412,7 +4081,7 @@ function App() {
 
         {/* Comparison Example */}
         {!allFilesUploaded && (
-          <div className="mt-16 mb-12 max-w-3xl mx-auto">
+          <div className="mt-16 mb-12 max-w-4xl mx-auto">
             <div className={`rounded-xl p-6 border ${
               isDarkMode ? 'bg-black border-white' : 'bg-white border-gray-200'
             }`}>
@@ -3464,24 +4133,28 @@ function App() {
         {/* Generate Comparison Button */}
         {hasEnoughFiles && !comparisonGenerated && (
           <div className="text-center mb-8">
-            <button
-              onClick={generateComparison}
-              disabled={isGeneratingComparison}
-              className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 ${
-                isGeneratingComparison
-                  ? isDarkMode 
-                    ? 'bg-black text-gray-300 cursor-not-allowed shadow-lg border-2 border-white' 
-                    : 'bg-gray-400 text-gray-600 cursor-not-allowed shadow-lg'
-                  : isDarkMode 
+            {isGeneratingComparison ? (
+              <div className="animate-border-wrapper inline-block">
+                <div className={`px-8 py-4 rounded-xl font-semibold text-lg ${
+                  isDarkMode 
+                    ? 'bg-black text-white' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}>
+                  Generating...
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={generateComparison}
+                className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 ${
+                  isDarkMode 
                     ? 'bg-black border-2 border-white hover:bg-gray-900 text-white shadow-lg hover:shadow-xl' 
                     : 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl'
-              }`}
-            >
-              {isGeneratingComparison ? 'Generating...' : 'Generate Comparison'}
-            </button>
-            <p className={`text-sm mt-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-              This will process all categories and charge based on pages processed
-            </p>
+                }`}
+              >
+                Generate Comparison
+              </button>
+            )}
           </div>
         )}
 
@@ -3687,6 +4360,14 @@ function App() {
           isHistorical={currentComparisonView.isHistorical}
           onExportPDF={!currentComparisonView.isHistorical ? exportToPDF : undefined}
           onExportCSV={!currentComparisonView.isHistorical ? exportToCSV : undefined}
+          onStatementNameChange={!currentComparisonView.isHistorical ? (index, newName) => {
+            handleStatementNameChange(index, newName);
+            // Also update the currentComparisonView
+            setCurrentComparisonView(prev => prev ? {
+              ...prev,
+              statementNames: prev.statementNames.map((n, i) => i === index ? newName : n)
+            } : null);
+          } : undefined}
         />
       ) : showPastDocumentsPage ? (
         <PastDocumentsPage
