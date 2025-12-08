@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, Eye, Target, TrendingDown, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, Eye, Target, TrendingDown, X, ChevronDown, ChevronRight, HelpCircle, ArrowLeftRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 import { userService } from './lib/userService';
 import { Profile, TIER_CONFIG, supabase } from './lib/supabase';
 import { stripeService, StripePlanId } from './lib/stripeService';
+import { categorizationService, formatMerchantPattern, CategoryRule } from './lib/categorizationService';
 
 
 
@@ -14,6 +15,46 @@ import { stripeService, StripePlanId } from './lib/stripeService';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/parse-bank-statement`;
+
+// Toast notification component for learning feedback
+interface ToastProps {
+  message: string;
+  isVisible: boolean;
+  onClose: () => void;
+  isDark: boolean;
+}
+
+function Toast({ message, isVisible, onClose, isDark }: ToastProps) {
+  useEffect(() => {
+    if (isVisible) {
+      const timer = setTimeout(() => {
+        onClose();
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [isVisible, onClose]);
+
+  if (!isVisible) return null;
+
+  return (
+    <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[200] animate-fade-in-up">
+      <div className={`flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl border-2 ${
+        isDark 
+          ? 'bg-gray-900 border-green-500 text-white' 
+          : 'bg-white border-green-500 text-gray-800'
+      }`}>
+        <span className="text-xl">🧠</span>
+        <span className="text-sm font-medium">{message}</span>
+        <button 
+          onClick={onClose}
+          className={`ml-2 p-1 rounded hover:bg-opacity-20 ${isDark ? 'hover:bg-white' : 'hover:bg-gray-500'}`}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface Transaction {
   id: string;
@@ -42,14 +83,17 @@ interface ComparisonResult {
 }
 
 const categories = [
-  { id: 'food-dining', name: 'Food & Dining', icon: Utensils, color: '#FF6B6B', keywords: ['starbucks', 'coffee', 'restaurant', 'mcdonald', 'taco bell', 'chipotle', 'subway', 'pizza', 'burger', 'dining'] },
-  { id: 'groceries', name: 'Groceries', icon: ShoppingBag, color: '#4ECDC4', keywords: ['frys', 'safeway', 'walmart', 'target', 'kroger', 'grocery', 'market', 'food store'] },
-  { id: 'gas-transport', name: 'Gas & Transportation', icon: Car, color: '#45B7D1', keywords: ['circle k', 'shell', 'chevron', 'exxon', 'uber', 'lyft', 'gas', 'fuel', 'transport'] },
-  { id: 'shopping', name: 'Shopping', icon: ShoppingBag, color: '#96CEB4', keywords: ['amazon', 'ebay', 'shop', 'store', 'retail', 'purchase', 'misc', 'other', 'unknown', 'unclassified'] },
-  { id: 'subscriptions', name: 'Subscriptions', icon: Gamepad2, color: '#FCEA2B', keywords: ['netflix', 'spotify', 'subscription', 'monthly', 'hulu', 'disney', 'prime', 'recurring', 'verizon'] },
-  { id: 'utilities', name: 'Utilities', icon: Zap, color: '#FF9FF3', keywords: ['electric', 'water', 'gas bill', 'utility', 'phone', 'internet', 'cable', 'atm', 'fee', 'charge', 'overdraft', 'penalty', 'applecard'] },
-  { id: 'health', name: 'Health & Fitness', icon: Activity, color: '#54A0FF', keywords: ['gym', 'health', 'medical', 'pharmacy', 'fitness', 'doctor', 'planet fitness', 'fitness center', 'workout'] },
-  { id: 'income', name: 'Income', icon: DollarSign, color: '#00D4AA', keywords: ['salary', 'deposit', 'payment', 'income', 'payroll', 'direct deposit'] }
+  { id: 'food-dining', name: 'Food & Dining', icon: Utensils, color: '#FF6B6B', keywords: ['starbucks', 'coffee', 'restaurant', 'mcdonald', 'taco bell', 'chipotle', 'subway', 'pizza', 'burger', 'dining', 'doordash', 'grubhub', 'ubereats', 'postmates', 'dunkin', 'wendys', 'chick-fil-a', 'panera', 'panda express', 'sonic', 'arbys', 'popeyes', 'kfc', 'ihop', 'denny', 'waffle', 'buffalo wild', 'applebee', 'olive garden', 'red lobster', 'outback', 'cheesecake factory', 'black rock', 'los favoritos', 'taco', 'asian fusion', 'jimmy john', 'raising cane', 'dutch bros', 'salad and go', 'pho', 'nekter', 'juice bar', 'einstein', 'in-n-out', 'in n out', 'pita jungle', 'pita', 'frutilandia', 'grill', 'smoothie', 'bagel', 'bakery', 'cafe', 'caffe', 'deli', 'sushi', 'ramen', 'noodle', 'wingstop', 'wing', 'zaxby', 'firehouse', 'jersey mike', 'potbelly', 'mod pizza', 'blaze pizza', 'cinco de mayo', 'el pollo', 'del taco', 'rubio', 'qdoba', 'moes', 'waba grill', 'teriyaki', 'poke', 'acai'] },
+  { id: 'groceries', name: 'Groceries', icon: ShoppingBag, color: '#4ECDC4', keywords: ['frys', 'safeway', 'kroger', 'grocery', 'market', 'food store', 'whole foods', 'trader joe', 'aldi', 'publix', 'wegmans', 'heb', 'meijer', 'food lion', 'giant', 'stop & shop', 'cvs', 'walgreens', 'rite aid', 'drugstore', 'pharmacy', 'bashas', 'sprouts', 'natural grocers', 'food city', 'winco', 'food 4 less', 'smart & final', 'grocery outlet', 'piggly wiggly', 'bi-lo', 'ingles', 'harris teeter', 'shoprite'] },
+  { id: 'gas-transport', name: 'Gas & Transportation', icon: Car, color: '#45B7D1', keywords: ['circle k', 'shell', 'chevron', 'exxon', 'uber', 'lyft', 'gas', 'fuel', 'transport', 'bp ', 'mobil', 'texaco', 'arco', 'valero', 'sunoco', 'marathon', 'parking', 'toll', 'metro', 'transit', 'autozone', 'oreilly', 'advance auto', 'napa', 'jiffy lube', 'valvoline', 'firestone', 'goodyear', 'discount tire', 'pep boys', 'midas', 'meineke', 'car wash', 'qt ', 'quiktrip', 'clean freak', 'racetrac', 'wawa', 'sheetz', 'speedway', 'loves travel', 'pilot ', 'flying j', 'kwik trip', 'kum & go', 'caseys', "buc-ee"] },
+  { id: 'subscriptions', name: 'Subscriptions', icon: Gamepad2, color: '#FCEA2B', keywords: ['netflix', 'spotify', 'subscription', 'monthly', 'hulu', 'disney', 'prime', 'recurring', 'verizon', 'apple music', 'youtube', 'hbo', 'peacock', 'paramount', 'audible', 'kindle', 'xbox', 'playstation', 'nintendo', 'gym', 'planet fitness', 'fitness center', 'la fitness', 'anytime fitness', '24 hour fitness', 'ymca', 'crossfit', 'dropbox', 'adobe', 'microsoft 365', 'google storage', 'icloud', 'evernote', 'notion', 'slack', 'zoom'] },
+  { id: 'utilities', name: 'Utilities & Bills', icon: Zap, color: '#FF9FF3', keywords: ['electric', 'water', 'gas bill', 'utility', 'phone', 'internet', 'cable', 'atm', 'fee', 'charge', 'overdraft', 'penalty', 'comcast', 'xfinity', 'spectrum', 'at&t', 't-mobile', 'sprint', 'cox', 'frontier', 'srp', 'surepay', 'centurylink', 'aps ', 'pg&e', 'sce ', 'duke energy', 'dominion', 'entergy', 'insurance', 'geico', 'progressive', 'state farm', 'allstate', 'liberty mutual', 'usaa'] },
+  { id: 'credit-repayments', name: 'Credit Repayments', icon: CreditCard, color: '#E17055', keywords: ['student loan', 'dept education', 'dept of ed', 'navient', 'nelnet', 'fedloan', 'mohela', 'great lakes', 'aidvantage', 'sallie mae', 'loan payment', 'loan repayment', 'credit card payment', 'card payment', 'discover payment', 'chase payment', 'amex payment', 'capital one payment', 'citi payment', 'wells fargo payment', 'bank of america payment', 'synchrony', 'affirm', 'klarna', 'afterpay', 'paypal credit', 'personal loan', 'auto loan', 'car payment', 'car loan', 'mortgage', 'home loan', 'line of credit', 'heloc', 'consolidation', 'sofi', 'earnest', 'upstart', 'prosper', 'lending club', 'marcus', 'lightstream', 'best egg', 'avant', 'upgrade', 'debt payment', 'applecard', 'apple card'] },
+  { id: 'health', name: 'Health & Medical', icon: Activity, color: '#54A0FF', keywords: ['medical', 'doctor', 'hospital', 'clinic', 'dental', 'dentist', 'orthodont', 'xray', 'x-ray', 'radiology', 'lab', 'quest diagnostics', 'labcorp', 'urgent care', 'emergency', 'physician', 'optometrist', 'eye doctor', 'vision', 'dermatolog', 'cardio', 'pediatr', 'obgyn', 'physical therapy', 'chiropract', 'mental health', 'psychiatr', 'psycholog', 'therapy', 'counseling', 'optique', 'optical', 'lenscrafters', 'pearle vision', 'americas best', 'eyeglass'] },
+  { id: 'income', name: 'Income', icon: DollarSign, color: '#00D4AA', keywords: ['salary', 'deposit', 'payment', 'income', 'payroll', 'direct deposit'] },
+  { id: 'shopping', name: 'Shopping & Retail', icon: ShoppingBag, color: '#96CEB4', keywords: ['amazon', 'ebay', 'etsy', 'walmart', 'target', 'best buy', 'home depot', 'lowes', 'costco', 'sams club', 'ikea', 'bed bath', 'wayfair', 'overstock', 'kohls', 'tj maxx', 'marshalls', 'ross', 'burlington', 'nordstrom', 'macys', 'jcpenney', 'dillards', 'sephora', 'ulta', 'bath body', 'old navy', 'gap', 'banana republic', 'h&m', 'zara', 'forever 21', 'nike', 'adidas', 'foot locker', 'dicks sporting', 'academy', 'michaels', 'joann', 'hobby lobby', 'petco', 'petsmart', 'chewy', 'barnes', 'noble', 'bikemaster', 'smoke shop', 'grooming', 'barber', 'hair', 'salon', 'spa', 'nail', 'mens ultimate', 'supercuts', 'great clips', 'sports clips', 'bookstore', 'book store', 'gamestop', 'five below', 'dollar tree', 'dollar general', 'family dollar', '99 cents', 'big lots', 'tuesday morning', 'at home', 'pier 1', 'world market', 'container store', 'crate barrel', 'pottery barn', 'williams sonoma', 'restoration hardware', 'cb2'] },
+  { id: 'transfers', name: 'Transfers', icon: ArrowLeftRight, color: '#A78BFA', keywords: ['transfer', 'online transfer', 'bank transfer', 'wire transfer', 'ach transfer', 'internal transfer', 'external transfer', 'zelle', 'venmo', 'paypal', 'cash app', 'money transfer', 'send money', 'receive money', 'save as you go'] },
+  { id: 'uncategorized', name: 'Uncategorized', icon: HelpCircle, color: '#9CA3AF', keywords: [] }
 ];
 
 // Helper to clean up transaction descriptions
@@ -271,6 +315,12 @@ class BankStatementParser {
   }
 
   private categorizeTransaction(description: string): string {
+    // 1. First check user's learned rules (highest priority)
+    const learnedCategory = categorizationService.getLearnedCategory(description);
+    if (learnedCategory) {
+      return learnedCategory;
+    }
+    
     const lowerDesc = description.toLowerCase();
     
     // Special case: Frys always goes to groceries (even if it says recurring)
@@ -278,13 +328,14 @@ class BankStatementParser {
       return 'groceries';
     }
     
+    // 2. Fall back to keyword matching
     for (const [categoryId, keywords] of Object.entries(this.categoryKeywords)) {
       if (keywords.some(keyword => lowerDesc.includes(keyword))) {
         return categoryId;
       }
     }
     
-    return 'shopping'; // Default category
+    return 'uncategorized'; // Default category for unrecognized transactions
   }
 
   private generateSampleData(fileName: string): ParsedStatement {
@@ -469,7 +520,7 @@ function MultiFileUploadZone({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={`
-            relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200
+            animate-pulse-glow relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200
             ${isDragOver 
               ? isDark ? 'border-white bg-black' : 'border-green-500 bg-green-50'
               : isDark ? 'border-white hover:border-white bg-black' : 'border-gray-300 hover:border-gray-400 bg-white'
@@ -904,7 +955,8 @@ function CategoryDetailModal({
   isDark,
   parsedData,
   statementNames,
-  onTransactionUpdate
+  onTransactionUpdate,
+  onLearnCategory
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -913,6 +965,7 @@ function CategoryDetailModal({
   parsedData: ParsedStatement[];
   statementNames: string[];
   onTransactionUpdate?: (statementIndex: number, transactions: Transaction[]) => void;
+  onLearnCategory?: (description: string, oldCategory: string, newCategory: string) => void;
 }) {
   const [editingTransaction, setEditingTransaction] = useState<{ statementIndex: number; transactionId: string } | null>(null);
   const [localTransactions, setLocalTransactions] = useState<Transaction[][]>([]);
@@ -932,6 +985,14 @@ function CategoryDetailModal({
   if (!isOpen || !category) return null;
 
   const handleEditTransaction = (statementIndex: number, transactionId: string, updates: Partial<Transaction>) => {
+    // Find the original transaction to check if category changed
+    const originalTransaction = localTransactions[statementIndex]?.find(t => t.id === transactionId);
+    
+    // If category changed, learn from it
+    if (originalTransaction && updates.category && updates.category !== originalTransaction.category) {
+      onLearnCategory?.(originalTransaction.description, originalTransaction.category, updates.category);
+    }
+    
     setLocalTransactions(prev => {
       const newTransactions = [...prev];
       newTransactions[statementIndex] = newTransactions[statementIndex].map(t => 
@@ -983,19 +1044,19 @@ function CategoryDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
       {/* Backdrop */}
       <div 
         className="fixed inset-0 bg-black/80 backdrop-blur-md"
         onClick={onClose}
       />
       
-      {/* Modal */}
-      <div className={`relative z-[101] w-full max-w-4xl max-h-[80vh] overflow-hidden rounded-xl shadow-2xl border-2 ${
+      {/* Modal - Wide with margins */}
+      <div className={`relative z-[101] w-full max-w-7xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col rounded-xl border-2 ${
         isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
       }`}>
         {/* Header */}
-        <div className={`sticky top-0 z-10 px-4 py-3 border-b-2 ${
+        <div className={`flex-shrink-0 px-4 sm:px-6 py-4 border-b ${
           isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
         }`}>
           <div className="flex items-center justify-between">
@@ -1027,7 +1088,7 @@ function CategoryDetailModal({
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(80vh-110px)] p-4">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className={`grid gap-4 ${parsedData.length === 2 ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
             {parsedData.map((_, statementIndex) => (
               <div key={statementIndex} className={`rounded-xl border-2 overflow-hidden ${
@@ -1248,10 +1309,10 @@ function CategoryDetailModal({
         </div>
 
         {/* Footer */}
-        <div className={`sticky bottom-0 px-4 py-3 border-t-2 ${
+        <div className={`flex-shrink-0 px-4 sm:px-6 py-4 border-t ${
           isDark ? 'bg-black border-white' : 'bg-white border-gray-200'
         }`}>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-3">
             <button
               onClick={onClose}
               className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
@@ -1283,7 +1344,8 @@ function ComparisonResults({
   isDark,
   parsedData,
   onStatementNameChange,
-  onTransactionUpdate
+  onTransactionUpdate,
+  onLearnCategory
 }: {
   data: { [key: string]: ComparisonResult };
   statementNames: string[];
@@ -1293,6 +1355,7 @@ function ComparisonResults({
   parsedData?: ParsedStatement[];
   onStatementNameChange?: (index: number, newName: string) => void;
   onTransactionUpdate?: (statementIndex: number, transactions: Transaction[]) => void;
+  onLearnCategory?: (description: string, oldCategory: string, newCategory: string) => void;
 }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'amount' | 'alphabetical'>('amount');
@@ -1690,6 +1753,7 @@ function ComparisonResults({
           parsedData={parsedData}
           statementNames={statementNames}
           onTransactionUpdate={onTransactionUpdate}
+          onLearnCategory={onLearnCategory}
         />
       )}
     </div>
@@ -2540,6 +2604,9 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
             )}
           </div>
           
+          {/* Category Rules Section */}
+          <CategoryRulesSection isDark={isDark} />
+          
           {/* Signed in email display - moved to bottom */}
           {isAuthenticated && userEmail && (
             <div className={`text-center mt-6 text-sm ${
@@ -2551,6 +2618,152 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
         </div>
       </div>
     </div>
+  );
+}
+
+// Component for managing category learning rules
+function CategoryRulesSection({ isDark }: { isDark: boolean }) {
+  const [rules, setRules] = useState<CategoryRule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadRules = async () => {
+      try {
+        // Ensure the service has loaded rules
+        const user = await userService.getCurrentUser();
+        const sessionId = userService.getSessionId();
+        await categorizationService.loadUserRules(user?.id, sessionId);
+        setRules(categorizationService.getRules());
+      } catch (error) {
+        console.error('Failed to load rules:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadRules();
+  }, []);
+
+  const handleDeleteRule = async (merchantPattern: string) => {
+    setDeleting(merchantPattern);
+    const success = await categorizationService.deleteRule(merchantPattern);
+    if (success) {
+      setRules(categorizationService.getRules());
+    }
+    setDeleting(null);
+  };
+
+  const handleClearAll = async () => {
+    if (!window.confirm('Are you sure you want to delete all your learned category rules?')) {
+      return;
+    }
+    const success = await categorizationService.clearAllRules();
+    if (success) {
+      setRules([]);
+    }
+  };
+
+  return (
+    <>
+      <div className="text-center mt-8 mb-8">
+        <h1 className={`text-3xl font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+          My Category Rules
+        </h1>
+        <p className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+          These rules are learned when you recategorize transactions
+        </p>
+      </div>
+      
+      <div className={`p-6 rounded-lg border ${
+        isDark ? 'bg-black border-white' : 'bg-gray-50 border-gray-200'
+      }`}>
+        {loading ? (
+          <div className={`text-center py-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            <Loader2 className="mx-auto h-6 w-6 animate-spin mb-2" />
+            <p className="text-sm">Loading rules...</p>
+          </div>
+        ) : rules.length === 0 ? (
+          <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            <HelpCircle className="mx-auto h-10 w-10 mb-3 opacity-50" />
+            <p className="text-sm">No category rules yet</p>
+            <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+              When you change a transaction's category, we'll remember it for next time
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {rules.map((rule) => {
+                const category = categories.find(c => c.id === rule.category_id);
+                const Icon = category?.icon || HelpCircle;
+                return (
+                  <div 
+                    key={rule.merchant_pattern}
+                    className={`flex items-center justify-between p-3 rounded-lg ${
+                      isDark ? 'bg-gray-900' : 'bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <span className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                        "{formatMerchantPattern(rule.merchant_pattern)}"
+                      </span>
+                      <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>→</span>
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="p-1.5 rounded-full"
+                          style={{ backgroundColor: (category?.color || '#9CA3AF') + '20' }}
+                        >
+                          <Icon 
+                            className="h-3.5 w-3.5" 
+                            style={{ color: category?.color || '#9CA3AF' }} 
+                          />
+                        </div>
+                        <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                          {category?.name || rule.category_id}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteRule(rule.merchant_pattern)}
+                      disabled={deleting === rule.merchant_pattern}
+                      className={`ml-3 p-2 rounded-lg transition-colors ${
+                        isDark 
+                          ? 'hover:bg-red-900/50 text-gray-400 hover:text-red-400' 
+                          : 'hover:bg-red-50 text-gray-400 hover:text-red-600'
+                      } ${deleting === rule.merchant_pattern ? 'opacity-50' : ''}`}
+                    >
+                      {deleting === rule.merchant_pattern ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {rules.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-dashed flex justify-between items-center ${isDark ? 'border-gray-700' : 'border-gray-300'}">
+                <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {rules.length} rule{rules.length !== 1 ? 's' : ''} learned
+                </span>
+                <button
+                  onClick={handleClearAll}
+                  className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
+                    isDark 
+                      ? 'text-red-400 hover:bg-red-900/30' 
+                      : 'text-red-600 hover:bg-red-50'
+                  }`}
+                >
+                  Clear All
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -2571,6 +2784,11 @@ function PastDocumentsPage({ isVisible, onBack, isDark, onViewDetails }: {
         // Get current user or session ID
         const user = await userService.getCurrentUser();
         const sessionId = userService.getSessionId();
+        
+        // Ensure session context is set for anonymous users (required for RLS)
+        if (!user) {
+          await userService.ensureSessionContext();
+        }
         
         // Fetch comparisons from database
         let query = supabase
@@ -2828,7 +3046,8 @@ function ComparisonResultsPage({
   isHistorical = false,
   onExportPDF,
   onExportCSV,
-  onStatementNameChange
+  onStatementNameChange,
+  onLearnCategory
 }: {
   isVisible: boolean;
   onBack: () => void;
@@ -2841,6 +3060,7 @@ function ComparisonResultsPage({
   onExportPDF?: () => void;
   onExportCSV?: () => void;
   onStatementNameChange?: (index: number, newName: string) => void;
+  onLearnCategory?: (description: string, oldCategory: string, newCategory: string) => void;
 }) {
   if (!isVisible || !comparisonData) return null;
 
@@ -2891,6 +3111,7 @@ function ComparisonResultsPage({
           isDark={isDark}
           parsedData={parsedData}
           onStatementNameChange={onStatementNameChange}
+          onLearnCategory={onLearnCategory}
         />
 
         {/* Export Options */}
@@ -2975,10 +3196,13 @@ function TransactionEditor({
   };
 
   return (
-    <div className={`rounded-xl p-6 shadow-lg border ${
-      isDark ? 'bg-black border-white' : 'bg-white border-gray-100'
+    <div className={`flex flex-col h-full ${
+      isDark ? 'bg-black' : 'bg-white'
     }`}>
-      <div className="flex items-center justify-between mb-6">
+      {/* Header */}
+      <div className={`flex items-center justify-between p-4 sm:p-6 border-b ${
+        isDark ? 'border-white' : 'border-gray-200'
+      }`}>
         <h3 className={`text-xl font-bold flex items-center gap-2 ${
           isDark ? 'text-gray-200' : 'text-gray-800'
         }`}>
@@ -2996,10 +3220,19 @@ function TransactionEditor({
           >
             Add Transaction
           </button>
+          <button
+            onClick={onCancel}
+            className={`p-2 rounded-lg transition-colors ${
+              isDark ? 'hover:bg-gray-900 text-gray-400' : 'hover:bg-gray-100 text-gray-600'
+            }`}
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
-      <div className="space-y-3 max-h-96 overflow-y-auto">
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
         {editingTransactions.map((transaction) => (
           <div key={transaction.id} className={`p-4 rounded-lg border ${
             isDark ? 'bg-black border-white' : 'bg-gray-50 border-gray-200'
@@ -3052,7 +3285,10 @@ function TransactionEditor({
         ))}
       </div>
 
-      <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+      {/* Footer */}
+      <div className={`flex justify-end gap-3 p-4 sm:p-6 border-t ${
+        isDark ? 'border-white' : 'border-gray-200'
+      }`}>
         <button
           onClick={onCancel}
           className={`px-6 py-2 rounded-lg font-medium transition-colors ${
@@ -3275,8 +3511,40 @@ function App() {
   const [comparisonGenerated, setComparisonGenerated] = useState(false);
   const [isGeneratingComparison, setIsGeneratingComparison] = useState(false);
 
+  // Toast notification state for category learning
+  const [toastMessage, setToastMessage] = useState('');
+  const [showToast, setShowToast] = useState(false);
+
   // Calculate max files based on tier
   const maxFiles = userTier && ['starter', 'pro', 'business'].includes(userTier) ? 4 : 2;
+
+  // Initialize categorization service when auth state changes
+  useEffect(() => {
+    const initCategorizationService = async () => {
+      try {
+        const user = await userService.getCurrentUser();
+        const sessionId = userService.getSessionId();
+        await categorizationService.loadUserRules(user?.id, sessionId);
+        console.log('Categorization service initialized with', categorizationService.getRuleCount(), 'rules');
+      } catch (error) {
+        console.error('Failed to initialize categorization service:', error);
+      }
+    };
+    initCategorizationService();
+  }, [isAuthenticated]);
+
+  // Function to learn from category changes and show toast
+  const learnFromCategoryChange = async (description: string, oldCategory: string, newCategory: string) => {
+    if (oldCategory === newCategory) return;
+    
+    const result = await categorizationService.learnFromCorrection(description, newCategory);
+    if (result.success && result.merchantPattern) {
+      const formattedPattern = formatMerchantPattern(result.merchantPattern);
+      const categoryName = categories.find(c => c.id === newCategory)?.name || newCategory;
+      setToastMessage(`Got it! Future "${formattedPattern}" transactions will be ${categoryName}`);
+      setShowToast(true);
+    }
+  };
 
 
   // Check authentication status and listen for changes
@@ -3602,6 +3870,11 @@ function App() {
         }
         console.log('User:', user);
         const sessionId = userService.getSessionId();
+        
+        // Ensure session context is set for anonymous users (required for RLS)
+        if (!user) {
+          await userService.ensureSessionContext();
+        }
         
         // Calculate totals for the comparison
         const totalWithdrawals = results.reduce((sum, r) => sum + r.totalWithdrawals, 0);
@@ -4158,16 +4431,26 @@ function App() {
           </div>
         )}
 
-        {/* Transaction Editor */}
+        {/* Transaction Editor Modal */}
         {showTransactionEditor >= 0 && parsedData[showTransactionEditor] && (
-          <div className="mb-8">
-            <TransactionEditor
-              transactions={parsedData[showTransactionEditor].transactions}
-              onSave={(transactions) => handleTransactionEditorSave(showTransactionEditor, transactions)}
-              onCancel={() => setShowTransactionEditor(-1)}
-              isDark={isDarkMode}
-              statementTitle={statementNames[showTransactionEditor] || `Statement ${showTransactionEditor + 1}`}
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+            {/* Backdrop */}
+            <div 
+              className="fixed inset-0 bg-black/80 backdrop-blur-md"
+              onClick={() => setShowTransactionEditor(-1)}
             />
+            {/* Modal - Wide with margins */}
+            <div className={`relative z-[101] w-full max-w-7xl max-h-[90vh] overflow-hidden shadow-2xl rounded-xl border-2 ${
+              isDarkMode ? 'bg-black border-white' : 'bg-white border-gray-200'
+            }`}>
+              <TransactionEditor
+                transactions={parsedData[showTransactionEditor].transactions}
+                onSave={(transactions) => handleTransactionEditorSave(showTransactionEditor, transactions)}
+                onCancel={() => setShowTransactionEditor(-1)}
+                isDark={isDarkMode}
+                statementTitle={statementNames[showTransactionEditor] || `Statement ${showTransactionEditor + 1}`}
+              />
+            </div>
           </div>
         )}
 
@@ -4368,6 +4651,7 @@ function App() {
               statementNames: prev.statementNames.map((n, i) => i === index ? newName : n)
             } : null);
           } : undefined}
+          onLearnCategory={learnFromCategoryChange}
         />
       ) : showPastDocumentsPage ? (
         <PastDocumentsPage
@@ -4393,8 +4677,13 @@ function App() {
         />
       )}
 
-
-      
+      {/* Toast notification for category learning */}
+      <Toast
+        message={toastMessage}
+        isVisible={showToast}
+        onClose={() => setShowToast(false)}
+        isDark={isDarkMode}
+      />
     </>
   );
 }

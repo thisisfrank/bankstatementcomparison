@@ -1,7 +1,8 @@
 -- Add tier tracking fields to profiles table
-ALTER TABLE profiles
-ADD COLUMN IF NOT EXISTS tier VARCHAR(50) DEFAULT 'anonymous',
-ADD COLUMN IF NOT EXISTS credits INTEGER DEFAULT 0;
+-- Note: tier and credits columns already exist in the profiles table from the initial migration
+-- with defaults 'free' and 0 respectively. We skip adding them again.
+-- If you need to change the default tier to 'anonymous', run:
+-- ALTER TABLE profiles ALTER COLUMN tier SET DEFAULT 'anonymous';
 
 -- Create usage_logs table for tracking usage
 CREATE TABLE IF NOT EXISTS usage_logs (

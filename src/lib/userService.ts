@@ -1,9 +1,10 @@
-import { supabase, Profile, UsageLog, TIER_CONFIG } from './supabase'
+import { supabase, Profile, UsageLog, TIER_CONFIG, setSessionContext } from './supabase'
 
 export class UserService {
   private static instance: UserService
   private currentUser: Profile | null = null
   private sessionId: string | null = null
+  private sessionContextSet: boolean = false
 
   static getInstance(): UserService {
     if (!UserService.instance) {
@@ -44,10 +45,35 @@ export class UserService {
     return this.sessionId
   }
 
+  // Ensure session context is set for anonymous database operations
+  // This sets the session_id in PostgreSQL so RLS policies can validate it
+  async ensureSessionContext(): Promise<void> {
+    // Only needed for anonymous users
+    const user = await this.getCurrentUser()
+    if (user) {
+      // Authenticated users don't need session context
+      return
+    }
+
+    // Set the session context if not already set in this session
+    if (!this.sessionContextSet) {
+      const sessionId = this.getSessionId()
+      await setSessionContext(sessionId)
+      this.sessionContextSet = true
+    }
+  }
+
+  // Force refresh session context (call after session changes)
+  async refreshSessionContext(): Promise<void> {
+    this.sessionContextSet = false
+    await this.ensureSessionContext()
+  }
+
   // Clear anonymous session (for testing or when user signs up)
   clearAnonymousSession(): void {
     localStorage.removeItem('anonymous_session_id')
     this.sessionId = null
+    this.sessionContextSet = false
   }
 
   // Sign in with email/password
@@ -299,6 +325,11 @@ export class UserService {
     const user = await this.getCurrentUser()
     const sessionId = this.getSessionId()
 
+    // Ensure session context is set for anonymous users before database operations
+    if (!user) {
+      await this.ensureSessionContext()
+    }
+
     // Log the usage
     const { error: logError } = await supabase
       .from('usage_logs')
@@ -346,6 +377,11 @@ export class UserService {
       const user = await this.getCurrentUser()
       const sessionId = this.getSessionId()
 
+      // Ensure session context is set for anonymous users before database operations
+      if (!user) {
+        await this.ensureSessionContext()
+      }
+
       // Add timeout to prevent hanging
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Database timeout')), 5000)
@@ -379,6 +415,7 @@ export class UserService {
     // Clear all local state first
     this.currentUser = null;
     this.sessionId = null;
+    this.sessionContextSet = false;
     this.clearAnonymousSession();
     console.log('🔍 signOut: Local state cleared');
     

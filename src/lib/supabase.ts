@@ -11,6 +11,16 @@ console.log('🔧 Has anon key from env:', !!import.meta.env.VITE_SUPABASE_ANON_
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// Helper to set session context for anonymous users
+// This must be called before any database operations for anonymous users
+// to ensure RLS policies can validate the session_id
+export async function setSessionContext(sessionId: string): Promise<void> {
+  const { error } = await supabase.rpc('set_session_context', { p_session_id: sessionId })
+  if (error) {
+    console.error('Failed to set session context:', error)
+  }
+}
+
 // Types for our database
 export interface Profile {
   id: string
