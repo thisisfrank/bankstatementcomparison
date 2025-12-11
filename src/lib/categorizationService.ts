@@ -274,3 +274,7 @@ class CategorizationService {
 }
 
 export const categorizationService = new CategorizationService();
+
+
+
+

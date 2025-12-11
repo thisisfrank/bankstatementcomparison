@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, Eye, Target, TrendingDown, X, ChevronDown, ChevronRight, HelpCircle, ArrowLeftRight } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, Eye, Target, TrendingDown, X, ChevronDown, ChevronRight, HelpCircle, ArrowLeftRight, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 import { userService } from './lib/userService';
@@ -969,6 +969,14 @@ function CategoryDetailModal({
 }) {
   const [editingTransaction, setEditingTransaction] = useState<{ statementIndex: number; transactionId: string } | null>(null);
   const [localTransactions, setLocalTransactions] = useState<Transaction[][]>([]);
+  // Form state for the transaction being edited
+  const [editFormData, setEditFormData] = useState<{
+    date: string;
+    amount: number;
+    description: string;
+    category: string;
+    type: 'withdrawal' | 'deposit';
+  } | null>(null);
 
   const category = categories.find(c => c.id === categoryId);
   const Icon = category?.icon || BarChart3;
@@ -984,23 +992,44 @@ function CategoryDetailModal({
 
   if (!isOpen || !category) return null;
 
-  const handleEditTransaction = (statementIndex: number, transactionId: string, updates: Partial<Transaction>) => {
+  // Start editing a transaction - initialize form data
+  const startEditing = (statementIndex: number, transaction: Transaction) => {
+    setEditingTransaction({ statementIndex, transactionId: transaction.id });
+    setEditFormData({
+      date: transaction.date,
+      amount: transaction.amount,
+      description: cleanDescription(transaction.description),
+      category: transaction.category,
+      type: transaction.type
+    });
+  };
+
+  // Cancel editing
+  const cancelEditing = () => {
+    setEditingTransaction(null);
+    setEditFormData(null);
+  };
+
+  const handleEditTransaction = (statementIndex: number, transactionId: string) => {
+    if (!editFormData) return;
+    
     // Find the original transaction to check if category changed
     const originalTransaction = localTransactions[statementIndex]?.find(t => t.id === transactionId);
     
     // If category changed, learn from it
-    if (originalTransaction && updates.category && updates.category !== originalTransaction.category) {
-      onLearnCategory?.(originalTransaction.description, originalTransaction.category, updates.category);
+    if (originalTransaction && editFormData.category !== originalTransaction.category) {
+      onLearnCategory?.(originalTransaction.description, originalTransaction.category, editFormData.category);
     }
     
     setLocalTransactions(prev => {
       const newTransactions = [...prev];
       newTransactions[statementIndex] = newTransactions[statementIndex].map(t => 
-        t.id === transactionId ? { ...t, ...updates } : t
+        t.id === transactionId ? { ...t, ...editFormData } : t
       );
       return newTransactions;
     });
     setEditingTransaction(null);
+    setEditFormData(null);
   };
 
   const handleDeleteTransaction = (statementIndex: number, transactionId: string) => {
@@ -1026,6 +1055,13 @@ function CategoryDetailModal({
       return newTransactions;
     });
     setEditingTransaction({ statementIndex, transactionId: newTransaction.id });
+    setEditFormData({
+      date: '',
+      description: 'New Transaction',
+      amount: 0,
+      category: categoryId,
+      type: 'withdrawal'
+    });
   };
 
   const handleSaveAll = () => {
@@ -1039,8 +1075,15 @@ function CategoryDetailModal({
     onClose();
   };
 
+  // Compute totals for each statement - only count transactions still in this category
+  const statementTotals = useMemo(() => {
+    return localTransactions.map(transactions => 
+      transactions?.filter(t => t.category === categoryId).reduce((sum, t) => sum + t.amount, 0) || 0
+    );
+  }, [localTransactions, categoryId]);
+
   const getTotalForStatement = (statementIndex: number) => {
-    return localTransactions[statementIndex]?.reduce((sum, t) => sum + t.amount, 0) || 0;
+    return statementTotals[statementIndex] || 0;
   };
 
   return (
@@ -1072,7 +1115,7 @@ function CategoryDetailModal({
                   {category.name}
                 </h2>
                 <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {localTransactions.flat().length} total transactions
+                  {localTransactions.flat().filter(t => t.category === categoryId).length} total transactions
                 </p>
               </div>
             </div>
@@ -1104,7 +1147,7 @@ function CategoryDetailModal({
                         {statementNames[statementIndex] || `Statement ${statementIndex + 1}`}
                       </h3>
                       <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                        {localTransactions[statementIndex]?.length || 0} transactions
+                        {localTransactions[statementIndex]?.filter(t => t.category === categoryId).length || 0} transactions
                       </p>
                     </div>
                     <div className="text-right">
@@ -1149,14 +1192,14 @@ function CategoryDetailModal({
                                 </label>
                                 <input
                                   type="text"
-                                  defaultValue={transaction.date}
+                                  value={editFormData?.date || ''}
+                                  onChange={(e) => setEditFormData(prev => prev ? {...prev, date: e.target.value} : null)}
                                   className={`w-full px-3 py-2 rounded-lg border text-sm ${
                                     isDark 
                                       ? 'bg-black border-white text-white' 
                                       : 'bg-white border-gray-300 text-gray-900'
                                   }`}
                                   placeholder="MM/DD"
-                                  id={`date-${transaction.id}`}
                                 />
                               </div>
                               <div>
@@ -1166,14 +1209,14 @@ function CategoryDetailModal({
                                 <input
                                   type="number"
                                   step="0.01"
-                                  defaultValue={transaction.amount}
+                                  value={editFormData?.amount || 0}
+                                  onChange={(e) => setEditFormData(prev => prev ? {...prev, amount: parseFloat(e.target.value) || 0} : null)}
                                   className={`w-full px-3 py-2 rounded-lg border text-sm ${
                                     isDark 
                                       ? 'bg-black border-white text-white' 
                                       : 'bg-white border-gray-300 text-gray-900'
                                   }`}
                                   placeholder="0.00"
-                                  id={`amount-${transaction.id}`}
                                 />
                               </div>
                             </div>
@@ -1183,14 +1226,14 @@ function CategoryDetailModal({
                               </label>
                               <input
                                 type="text"
-                                defaultValue={cleanDescription(transaction.description)}
+                                value={editFormData?.description || ''}
+                                onChange={(e) => setEditFormData(prev => prev ? {...prev, description: e.target.value} : null)}
                                 className={`w-full px-3 py-2 rounded-lg border text-sm ${
                                   isDark 
                                     ? 'bg-black border-white text-white' 
                                     : 'bg-white border-gray-300 text-gray-900'
                                 }`}
                                 placeholder="Transaction description"
-                                id={`desc-${transaction.id}`}
                               />
                             </div>
                             <div className="grid grid-cols-2 gap-3 mb-3">
@@ -1199,13 +1242,13 @@ function CategoryDetailModal({
                                   Category
                                 </label>
                                 <select
-                                  defaultValue={transaction.category}
+                                  value={editFormData?.category || ''}
+                                  onChange={(e) => setEditFormData(prev => prev ? {...prev, category: e.target.value} : null)}
                                   className={`w-full px-3 py-2 rounded-lg border text-sm ${
                                     isDark 
                                       ? 'bg-black border-white text-white' 
                                       : 'bg-white border-gray-300 text-gray-900'
                                   }`}
-                                  id={`cat-${transaction.id}`}
                                 >
                                   {categories.map(cat => (
                                     <option key={cat.id} value={cat.id}>{cat.name}</option>
@@ -1217,13 +1260,13 @@ function CategoryDetailModal({
                                   Type
                                 </label>
                                 <select
-                                  defaultValue={transaction.type}
+                                  value={editFormData?.type || 'withdrawal'}
+                                  onChange={(e) => setEditFormData(prev => prev ? {...prev, type: e.target.value as 'withdrawal' | 'deposit'} : null)}
                                   className={`w-full px-3 py-2 rounded-lg border text-sm ${
                                     isDark 
                                       ? 'bg-black border-white text-white' 
                                       : 'bg-white border-gray-300 text-gray-900'
                                   }`}
-                                  id={`type-${transaction.id}`}
                                 >
                                   <option value="withdrawal">Withdrawal</option>
                                   <option value="deposit">Deposit</option>
@@ -1238,7 +1281,7 @@ function CategoryDetailModal({
                                 Delete
                               </button>
                               <button
-                                onClick={() => setEditingTransaction(null)}
+                                onClick={cancelEditing}
                                 className={`px-3 py-1.5 text-sm rounded-lg ${
                                   isDark ? 'bg-black border border-white hover:bg-gray-900 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
                                 }`}
@@ -1246,21 +1289,7 @@ function CategoryDetailModal({
                                 Cancel
                               </button>
                               <button
-                                onClick={() => {
-                                  const dateEl = document.getElementById(`date-${transaction.id}`) as HTMLInputElement;
-                                  const amountEl = document.getElementById(`amount-${transaction.id}`) as HTMLInputElement;
-                                  const descEl = document.getElementById(`desc-${transaction.id}`) as HTMLInputElement;
-                                  const catEl = document.getElementById(`cat-${transaction.id}`) as HTMLSelectElement;
-                                  const typeEl = document.getElementById(`type-${transaction.id}`) as HTMLSelectElement;
-                                  
-                                  handleEditTransaction(statementIndex, transaction.id, {
-                                    date: dateEl.value,
-                                    amount: parseFloat(amountEl.value) || 0,
-                                    description: descEl.value,
-                                    category: catEl.value,
-                                    type: typeEl.value as 'withdrawal' | 'deposit'
-                                  });
-                                }}
+                                onClick={() => handleEditTransaction(statementIndex, transaction.id)}
                                 className="px-3 py-1.5 text-sm rounded-lg bg-green-600 hover:bg-green-700 text-white"
                               >
                                 Save
@@ -1270,23 +1299,36 @@ function CategoryDetailModal({
                         ) : (
                           // Display View
                           <div 
-                            className="p-3 cursor-pointer hover:bg-opacity-50 transition-colors"
-                            onClick={() => setEditingTransaction({ statementIndex, transactionId: transaction.id })}
+                            className={`p-3 cursor-pointer hover:bg-opacity-50 transition-colors ${
+                              transaction.category !== categoryId ? 'opacity-50' : ''
+                            }`}
+                            onClick={() => startEditing(statementIndex, transaction)}
                           >
                             <div className="flex justify-between items-start">
                               <div className="flex-1 min-w-0">
-                                <p className={`font-medium truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                  {cleanDescription(transaction.description)}
-                                </p>
+                                <div className="flex items-center gap-2">
+                                  <p className={`font-medium truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                    {cleanDescription(transaction.description)}
+                                  </p>
+                                  {transaction.category !== categoryId && (
+                                    <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                      isDark ? 'bg-yellow-900/50 text-yellow-400' : 'bg-yellow-100 text-yellow-700'
+                                    }`}>
+                                      → {categories.find(c => c.id === transaction.category)?.name || 'Other'}
+                                    </span>
+                                  )}
+                                </div>
                                 <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                   {transaction.date}
                                 </p>
                               </div>
                               <div className="flex items-center gap-2 ml-3">
                                 <span className={`font-semibold ${
-                                  transaction.type === 'withdrawal' 
-                                    ? isDark ? 'text-red-400' : 'text-red-600'
-                                    : isDark ? 'text-green-400' : 'text-green-600'
+                                  transaction.category !== categoryId 
+                                    ? 'line-through opacity-50 ' + (isDark ? 'text-gray-400' : 'text-gray-500')
+                                    : transaction.type === 'withdrawal' 
+                                      ? isDark ? 'text-red-400' : 'text-red-600'
+                                      : isDark ? 'text-green-400' : 'text-green-600'
                                 }`}>
                                   {transaction.type === 'withdrawal' ? '-' : '+'}${transaction.amount.toFixed(2)}
                                 </span>
@@ -1345,7 +1387,8 @@ function ComparisonResults({
   parsedData,
   onStatementNameChange,
   onTransactionUpdate,
-  onLearnCategory
+  onLearnCategory,
+  isHistorical = false
 }: {
   data: { [key: string]: ComparisonResult };
   statementNames: string[];
@@ -1356,9 +1399,10 @@ function ComparisonResults({
   onStatementNameChange?: (index: number, newName: string) => void;
   onTransactionUpdate?: (statementIndex: number, transactions: Transaction[]) => void;
   onLearnCategory?: (description: string, oldCategory: string, newCategory: string) => void;
+  isHistorical?: boolean;
 }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'amount' | 'alphabetical'>('amount');
+  const [sortBy, setSortBy] = useState<'statement1' | 'statement2' | 'total' | 'alphabetical'>('statement1');
   const [showPercentage, setShowPercentage] = useState(false);
   const [editingIndex, setEditingIndex] = useState<{ table: 'spending' | 'income', index: number } | null>(null);
   
@@ -1384,11 +1428,19 @@ function ComparisonResults({
       const aName = categories.find(c => c.id === aId)?.name || '';
       const bName = categories.find(c => c.id === bId)?.name || '';
       return aName.localeCompare(bName);
+    } else if (sortBy === 'statement1') {
+      const aTotal = aResult.statementValues[0] || 0;
+      const bTotal = bResult.statementValues[0] || 0;
+      return bTotal - aTotal;
+    } else if (sortBy === 'statement2') {
+      const aTotal = aResult.statementValues[1] || 0;
+      const bTotal = bResult.statementValues[1] || 0;
+      return bTotal - aTotal;
     } else {
       // Sort by total amount (sum across all statements)
       const aTotal = aResult.statementValues.reduce((sum, val) => sum + val, 0);
       const bTotal = bResult.statementValues.reduce((sum, val) => sum + val, 0);
-      return bTotal - aTotal; // Descending order
+      return bTotal - aTotal;
     }
   });
 
@@ -1514,14 +1566,16 @@ function ComparisonResults({
               <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Sort:</span>
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'amount' | 'alphabetical')}
+                onChange={(e) => setSortBy(e.target.value as 'statement1' | 'statement2' | 'total' | 'alphabetical')}
                 className={`text-sm px-3 py-1.5 rounded-lg border ${
                   isDark 
                     ? 'bg-black border-white text-white' 
                     : 'bg-white border-gray-300 text-gray-800'
                 }`}
               >
-                <option value="amount">By Amount</option>
+                <option value="statement1">{statementNames[0] || 'Statement 1'}</option>
+                <option value="statement2">{statementNames[1] || 'Statement 2'}</option>
+                <option value="total">Combined Total</option>
                 <option value="alphabetical">A-Z</option>
               </select>
             </div>
@@ -1617,7 +1671,7 @@ function ComparisonResults({
                 </td>
                 {spendingTotals.map((total, index) => (
                   <td key={index} className="py-3 px-4 text-right">
-                    <span className={`font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                    <span className={`font-bold ${isHistorical ? (isDark ? 'text-white' : 'text-gray-800') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
                       ${total.toFixed(2)}
                     </span>
                   </td>
@@ -1702,7 +1756,7 @@ function ComparisonResults({
                   </td>
                   {incomeTotals.map((total, index) => (
                     <td key={index} className="py-3 px-4 text-right">
-                      <span className={`font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                      <span className={`font-bold ${isHistorical ? (isDark ? 'text-white' : 'text-gray-800') : (isDark ? 'text-green-400' : 'text-green-600')}`}>
                         ${total.toFixed(2)}
                       </span>
                     </td>
@@ -2395,7 +2449,7 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
   // Calculate credits based on user tier
   const tierConfig = user && user.tier && TIER_CONFIG[user.tier] 
     ? TIER_CONFIG[user.tier] 
-    : TIER_CONFIG.anonymous;
+    : isAuthenticated ? TIER_CONFIG.signup : TIER_CONFIG.anonymous;
   const creditsRemaining = user && typeof user.credits === 'number' 
     ? user.credits 
     : (tierConfig.credits - anonymousUsage);
@@ -2443,6 +2497,29 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
             <h1 className={`text-3xl font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
               Settings
             </h1>
+            {/* Current Tier Display */}
+            <div className="mt-4">
+              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Current Plan: </span>
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${
+                userTier === 'business' 
+                  ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                  : userTier === 'pro'
+                  ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                  : userTier === 'starter'
+                  ? 'bg-green-100 text-green-800 border border-green-300'
+                  : isAuthenticated
+                  ? 'bg-gray-100 text-gray-800 border border-gray-300'
+                  : isDark 
+                  ? 'bg-black text-white border-2 border-white'
+                  : 'bg-gray-100 text-gray-600 border border-gray-300'
+              }`}>
+                {userTier === 'business' ? '🏢 Business' 
+                  : userTier === 'pro' ? '⭐ Pro' 
+                  : userTier === 'starter' ? '🚀 Starter' 
+                  : isAuthenticated ? '👤 Free'
+                  : '👻 Anonymous'}
+              </span>
+            </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -2700,7 +2777,7 @@ function CategoryRulesSection({ isDark }: { isDark: boolean }) {
                   <div 
                     key={rule.merchant_pattern}
                     className={`flex items-center justify-between p-3 rounded-lg ${
-                      isDark ? 'bg-gray-900' : 'bg-white'
+                      isDark ? 'bg-black' : 'bg-white'
                     }`}
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -2839,7 +2916,8 @@ function PastDocumentsPage({ isVisible, onBack, isDark, onViewDetails }: {
             totalWithdrawals: doc.total_withdrawals || 0,
             totalDeposits: doc.total_deposits || 0,
             status: doc.status || 'completed',
-            results: doc.results || {}
+            results: doc.results || {},
+            parsedData: doc.parsed_data || null
           }));
           
           setPastDocuments(formattedDocuments);
@@ -2986,10 +3064,10 @@ function PastDocumentsPage({ isVisible, onBack, isDark, onViewDetails }: {
                   <div className="flex flex-wrap gap-3">
                     <button
                       onClick={() => onViewDetails(doc)}
-                      className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${
+                      className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 border ${
                         isDark 
-                          ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105' 
-                          : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
+                          ? 'bg-transparent text-white border-white hover:bg-black' 
+                          : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
                       }`}
                     >
                       <Eye className="h-4 w-4" />
@@ -2997,10 +3075,10 @@ function PastDocumentsPage({ isVisible, onBack, isDark, onViewDetails }: {
                     </button>
                     <button
                       onClick={() => handleDownloadPDF(doc.id)}
-                      className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${
+                      className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 border ${
                         isDark 
-                          ? 'bg-green-600 text-white hover:bg-green-700 hover:scale-105' 
-                          : 'bg-green-600 text-white hover:bg-green-700 hover:scale-105'
+                          ? 'bg-transparent text-white border-white hover:bg-black' 
+                          : 'bg-transparent text-gray-700 border-gray-300 hover:bg-gray-50'
                       }`}
                     >
                       <Download className="h-4 w-4" />
@@ -3047,6 +3125,7 @@ function ComparisonResultsPage({
   onExportPDF,
   onExportCSV,
   onStatementNameChange,
+  onTransactionUpdate,
   onLearnCategory
 }: {
   isVisible: boolean;
@@ -3060,6 +3139,7 @@ function ComparisonResultsPage({
   onExportPDF?: () => void;
   onExportCSV?: () => void;
   onStatementNameChange?: (index: number, newName: string) => void;
+  onTransactionUpdate?: (statementIndex: number, transactions: Transaction[]) => void;
   onLearnCategory?: (description: string, oldCategory: string, newCategory: string) => void;
 }) {
   if (!isVisible || !comparisonData) return null;
@@ -3111,7 +3191,9 @@ function ComparisonResultsPage({
           isDark={isDark}
           parsedData={parsedData}
           onStatementNameChange={onStatementNameChange}
+          onTransactionUpdate={onTransactionUpdate}
           onLearnCategory={onLearnCategory}
+          isHistorical={isHistorical}
         />
 
         {/* Export Options */}
@@ -3502,7 +3584,11 @@ function App() {
     parsedData?: ParsedStatement[];
     date?: string;
     isHistorical: boolean;
+    comparisonId?: string; // For historical documents, used to update names in database
   } | null>(null);
+  const [showHistoricalEditWarning, setShowHistoricalEditWarning] = useState(false);
+  const [historicalEditAcknowledged, setHistoricalEditAcknowledged] = useState(false);
+  const [pendingHistoricalUpdate, setPendingHistoricalUpdate] = useState<{ index: number; transactions: Transaction[] } | null>(null);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userTier, setUserTier] = useState<string | undefined>(undefined);
@@ -3543,6 +3629,97 @@ function App() {
       const categoryName = categories.find(c => c.id === newCategory)?.name || newCategory;
       setToastMessage(`Got it! Future "${formattedPattern}" transactions will be ${categoryName}`);
       setShowToast(true);
+    }
+  };
+
+  // Function to process transaction updates (works for both regular and historical views)
+  const processTransactionUpdate = async (index: number, updatedTransactions: Transaction[], isHistorical: boolean, comparisonId?: string) => {
+    // Get the source data (currentComparisonView for historical, parsedData for regular)
+    const sourceData = isHistorical ? currentComparisonView?.parsedData : parsedData;
+    if (!sourceData || !sourceData[index]) return;
+
+    // Update the statement data
+    const updatedParsedData = { ...sourceData[index] };
+    updatedParsedData.transactions = updatedTransactions;
+    
+    // Recalculate withdrawals and deposits
+    const withdrawals = updatedTransactions.filter(t => t.type === 'withdrawal');
+    const deposits = updatedTransactions.filter(t => t.type === 'deposit');
+    updatedParsedData.withdrawals = withdrawals;
+    updatedParsedData.deposits = deposits;
+    updatedParsedData.totalWithdrawals = withdrawals.reduce((sum, t) => sum + t.amount, 0);
+    updatedParsedData.totalDeposits = deposits.reduce((sum, t) => sum + t.amount, 0);
+    
+    const newParsedData = [...sourceData];
+    newParsedData[index] = updatedParsedData;
+    
+    if (!isHistorical) {
+      setParsedData(newParsedData);
+    }
+    
+    // Recalculate comparison results
+    const newComparisonData: { [key: string]: ComparisonResult } = {};
+    categories.forEach(cat => {
+      const statementValues = newParsedData.map(pd => 
+        pd.transactions
+          .filter(t => t.category === cat.id)
+          .reduce((sum, t) => sum + t.amount, 0)
+      );
+      if (statementValues.some(a => a > 0)) {
+        const avg = statementValues.reduce((a, b) => a + b, 0) / statementValues.length;
+        const differences = statementValues.map(v => v - avg);
+        const minIndex = statementValues.indexOf(Math.min(...statementValues));
+        const maxIndex = statementValues.indexOf(Math.max(...statementValues));
+        newComparisonData[cat.id] = {
+          category: cat.id,
+          statementValues,
+          differences,
+          minIndex,
+          maxIndex
+        };
+      }
+    });
+    
+    // Update currentComparisonView with new data
+    setCurrentComparisonView(prev => prev ? {
+      ...prev,
+      parsedData: newParsedData,
+      data: newComparisonData
+    } : null);
+
+    // For historical views, save to database
+    if (isHistorical && comparisonId) {
+      try {
+        const { error } = await supabase
+          .from('comparisons')
+          .update({ 
+            parsed_data: newParsedData,
+            results: newComparisonData,
+            statement1_withdrawals: newParsedData[0]?.totalWithdrawals || 0,
+            statement1_deposits: newParsedData[0]?.totalDeposits || 0,
+            statement2_withdrawals: newParsedData[1]?.totalWithdrawals || 0,
+            statement2_deposits: newParsedData[1]?.totalDeposits || 0
+          })
+          .eq('id', comparisonId);
+        
+        if (error) {
+          console.error('Error updating historical comparison:', error);
+        }
+      } catch (error) {
+        console.error('Error saving historical changes:', error);
+      }
+    }
+  };
+
+  // Handle historical transaction update with warning
+  const handleHistoricalTransactionUpdate = (index: number, updatedTransactions: Transaction[]) => {
+    if (historicalEditAcknowledged) {
+      // Already acknowledged, proceed directly
+      processTransactionUpdate(index, updatedTransactions, true, currentComparisonView?.comparisonId);
+    } else {
+      // Show warning first
+      setPendingHistoricalUpdate({ index, transactions: updatedTransactions });
+      setShowHistoricalEditWarning(true);
     }
   };
 
@@ -3888,6 +4065,7 @@ function App() {
           statement2_name: statementNames[1] || 'Statement 2',
           categories: Object.keys(comparison),
           results: comparison,
+          parsed_data: results, // Store transaction data for editing later
           total_withdrawals: totalWithdrawals,
           total_deposits: totalDeposits,
           statement1_withdrawals: results[0]?.totalWithdrawals || 0,
@@ -4634,6 +4812,8 @@ function App() {
               resetComparison();
             }
             setCurrentComparisonView(null);
+            // Reset historical edit acknowledgement
+            setHistoricalEditAcknowledged(false);
           }}
           isDark={isDarkMode}
           comparisonData={currentComparisonView.data}
@@ -4643,14 +4823,32 @@ function App() {
           isHistorical={currentComparisonView.isHistorical}
           onExportPDF={!currentComparisonView.isHistorical ? exportToPDF : undefined}
           onExportCSV={!currentComparisonView.isHistorical ? exportToCSV : undefined}
-          onStatementNameChange={!currentComparisonView.isHistorical ? (index, newName) => {
-            handleStatementNameChange(index, newName);
+          onStatementNameChange={(index, newName) => {
+            if (!currentComparisonView.isHistorical) {
+              handleStatementNameChange(index, newName);
+            } else if (currentComparisonView.comparisonId) {
+              // Update historical document in database
+              const updateField = index === 0 ? 'statement1_name' : 'statement2_name';
+              supabase
+                .from('comparisons')
+                .update({ [updateField]: newName })
+                .eq('id', currentComparisonView.comparisonId)
+                .then(({ error }) => {
+                  if (error) {
+                    console.error('Error updating statement name:', error);
+                  }
+                });
+            }
             // Also update the currentComparisonView
             setCurrentComparisonView(prev => prev ? {
               ...prev,
               statementNames: prev.statementNames.map((n, i) => i === index ? newName : n)
             } : null);
-          } : undefined}
+          }}
+          onTransactionUpdate={currentComparisonView.isHistorical 
+            ? (currentComparisonView.parsedData ? handleHistoricalTransactionUpdate : undefined)
+            : (index, updatedTransactions) => processTransactionUpdate(index, updatedTransactions, false)
+          }
           onLearnCategory={learnFromCategoryChange}
         />
       ) : showPastDocumentsPage ? (
@@ -4662,8 +4860,10 @@ function App() {
             setCurrentComparisonView({
               data: doc.results,
               statementNames: [doc.statement1Name, doc.statement2Name],
+              parsedData: doc.parsedData || undefined,
               date: doc.date,
-              isHistorical: true
+              isHistorical: true,
+              comparisonId: doc.id
             });
             setShowResultsPage(true);
           }}
@@ -4675,6 +4875,67 @@ function App() {
           isDark={isDarkMode}
           onOpenAuth={() => setShowAuthPage(true)}
         />
+      )}
+
+      {/* Historical Edit Warning Modal */}
+      {showHistoricalEditWarning && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div 
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => {
+              setShowHistoricalEditWarning(false);
+              setPendingHistoricalUpdate(null);
+            }}
+          />
+          <div className={`relative z-[201] w-full max-w-md p-6 rounded-xl border-2 shadow-2xl ${
+            isDarkMode ? 'bg-black border-yellow-500' : 'bg-white border-yellow-500'
+          }`}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-full bg-yellow-500/20">
+                <AlertTriangle className="h-6 w-6 text-yellow-500" />
+              </div>
+              <h3 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                Editing Historical Data
+              </h3>
+            </div>
+            <p className={`mb-6 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+              You're about to modify a saved comparison. This will permanently update the stored data and cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowHistoricalEditWarning(false);
+                  setPendingHistoricalUpdate(null);
+                }}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium border transition-colors ${
+                  isDarkMode 
+                    ? 'border-white text-white hover:bg-white/10' 
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setHistoricalEditAcknowledged(true);
+                  setShowHistoricalEditWarning(false);
+                  if (pendingHistoricalUpdate) {
+                    processTransactionUpdate(
+                      pendingHistoricalUpdate.index, 
+                      pendingHistoricalUpdate.transactions, 
+                      true, 
+                      currentComparisonView?.comparisonId
+                    );
+                    setPendingHistoricalUpdate(null);
+                  }
+                }}
+                className="flex-1 px-4 py-2 rounded-lg font-medium bg-yellow-500 text-black hover:bg-yellow-400 transition-colors"
+              >
+                Edit Anyway
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast notification for category learning */}

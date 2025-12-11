@@ -234,3 +234,7 @@ CREATE POLICY "profiles_update_policy" ON profiles
 CREATE POLICY "profiles_delete_policy" ON profiles
   FOR DELETE USING (auth.uid() = id);
 
+
+
+
+
