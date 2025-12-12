@@ -289,18 +289,44 @@ export class UserService {
         return result;
       } else {
         console.log('🔍 Processing as anonymous user...');
-        // Anonymous user - allow with generous limits, skip database check to avoid hanging
+        // Anonymous user - check actual usage from usage_logs
         const tierConfig = TIER_CONFIG.anonymous
+        const sessionId = this.getSessionId()
         
-        // For anonymous users, we'll be permissive and allow reasonable usage
-        // The actual usage tracking will happen in logUsage() after the comparison
-        const canPerform = pagesRequired <= 100 // Generous limit for anonymous users
+        // Ensure session context is set for anonymous users before database operations
+        await this.ensureSessionContext()
+        
+        // Query the usage_logs to get total credits used by this session
+        let creditsUsed = 0
+        try {
+          const usagePromise = supabase
+            .from('usage_logs')
+            .select('credits_used')
+            .eq('session_id', sessionId)
+          
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Usage check timeout')), 5000)
+          )
+          
+          const { data: usageLogs, error } = await Promise.race([usagePromise, timeoutPromise]) as any
+          
+          if (!error && usageLogs) {
+            creditsUsed = usageLogs.reduce((sum: number, log: { credits_used: number }) => sum + log.credits_used, 0)
+          }
+          console.log('🔍 Anonymous credits used:', creditsUsed)
+        } catch (error) {
+          console.error('Error fetching anonymous usage:', error)
+          // If check fails, be permissive to avoid blocking user
+        }
+        
+        const creditsRemaining = tierConfig.credits - creditsUsed
+        const canPerform = creditsRemaining >= pagesRequired
         
         const result = {
           canPerform,
-          reason: canPerform ? undefined : `Anonymous users are limited to ${tierConfig.credits} pages per comparison`,
+          reason: canPerform ? undefined : `You need ${pagesRequired} credits but only have ${creditsRemaining} remaining. Sign up for more free credits!`,
           tier: 'anonymous',
-          creditsUsed: 0,
+          creditsUsed: creditsUsed,
           creditsLimit: tierConfig.credits
         };
         console.log('🔍 Anonymous result:', result);

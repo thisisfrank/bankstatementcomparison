@@ -2324,6 +2324,22 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
             <p className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
               Choose the plan that fits your needs
             </p>
+            <div className={`mt-3 text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'} flex items-center justify-center gap-1`}>
+              <span>1 page = 1 credit</span>
+              <div className="relative group">
+                <HelpCircle className="h-4 w-4 cursor-help" />
+                <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 ${
+                  isDark ? 'bg-gray-800 text-gray-200' : 'bg-gray-900 text-white'
+                }`}>
+                  Average comparison uses ~15-20 pages
+                  <br />
+                  (about 5 pages per bank statement)
+                  <div className={`absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent ${
+                    isDark ? 'border-t-gray-800' : 'border-t-gray-900'
+                  }`}></div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2513,10 +2529,10 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
                   ? 'bg-black text-white border-2 border-white'
                   : 'bg-gray-100 text-gray-600 border border-gray-300'
               }`}>
-                {userTier === 'business' ? '🏢 Business' 
-                  : userTier === 'pro' ? '⭐ Pro' 
-                  : userTier === 'starter' ? '🚀 Starter' 
-                  : isAuthenticated ? '👤 Free'
+                {userTier === 'business' ? 'Business' 
+                  : userTier === 'pro' ? 'Pro' 
+                  : userTier === 'starter' ? 'Starter' 
+                  : isAuthenticated ? 'Free'
                   : '👻 Anonymous'}
               </span>
             </div>
@@ -2627,6 +2643,22 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
             <h1 className={`text-3xl font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
               Usage
             </h1>
+            <div className={`mt-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} flex items-center justify-center gap-1`}>
+              <span>1 credit = 1 page processed</span>
+              <div className="relative group">
+                <HelpCircle className="h-4 w-4 cursor-help" />
+                <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 ${
+                  isDark ? 'bg-gray-800 text-gray-200' : 'bg-gray-900 text-white'
+                }`}>
+                  Average comparison uses ~15-20 credits
+                  <br />
+                  (about 5 pages per bank statement)
+                  <div className={`absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent ${
+                    isDark ? 'border-t-gray-800' : 'border-t-gray-900'
+                  }`}></div>
+                </div>
+              </div>
+            </div>
           </div>
           
           {/* Credits & Usage Section */}
