@@ -9,3 +9,5 @@ COMMENT ON COLUMN comparisons.parsed_data IS 'Stores the full parsed statement d
 
 
 
+
+

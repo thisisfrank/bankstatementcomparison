@@ -2,6 +2,7 @@
 // This will be deployed as a Netlify function
 
 const { createClient } = require('@supabase/supabase-js');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // Initialize Supabase client
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -76,23 +77,31 @@ exports.handler = async (event, context) => {
 
     console.log('Processing webhook with signature:', signature ? 'present' : 'missing');
 
-    // In a production environment, you should verify the webhook signature
-    // const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    // const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-    // const stripeEvent = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    // Verify the webhook signature
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    
+    if (!webhookSecret) {
+      console.error('Missing STRIPE_WEBHOOK_SECRET environment variable');
+      return {
+        statusCode: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Webhook secret not configured' }),
+      };
+    }
 
-    // For testing purposes, we'll parse the body directly
     let stripeEvent;
     try {
-      stripeEvent = JSON.parse(body);
-    } catch (parseError) {
-      console.error('Error parsing webhook body:', parseError);
+      stripeEvent = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    } catch (err) {
+      console.error('Webhook signature verification failed:', err.message);
       return {
         statusCode: 400,
         headers: {
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'Invalid JSON' }),
+        body: JSON.stringify({ error: `Webhook signature verification failed: ${err.message}` }),
       };
     }
 

@@ -91,7 +91,6 @@ class CategorizationService {
         data.forEach(rule => {
           this.userRules.set(rule.merchant_pattern, rule);
         });
-        console.log(`Loaded ${data.length} category rules`);
       }
     } catch (error) {
       console.error('Failed to load category rules:', error);
@@ -196,7 +195,6 @@ class CategorizationService {
         confidence: newConfidence
       });
 
-      console.log(`Learned: "${signature}" → ${newCategoryId}`);
       return { success: true, merchantPattern: signature };
     } catch (error) {
       console.error('Failed to save category rule:', error);
@@ -226,7 +224,6 @@ class CategorizationService {
       }
 
       this.userRules.delete(merchantPattern);
-      console.log(`Deleted rule: "${merchantPattern}"`);
       return true;
     } catch (error) {
       console.error('Failed to delete rule:', error);
@@ -274,6 +271,8 @@ class CategorizationService {
 }
 
 export const categorizationService = new CategorizationService();
+
+
 
 
 

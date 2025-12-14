@@ -195,39 +195,28 @@ export class UserService {
 
   // Get current user profile
   async getCurrentUser(): Promise<Profile | null> {
-    console.log('🔍 getCurrentUser: Starting...');
     try {
-      // Check for valid session instead of cached user data
-      console.log('🔍 getCurrentUser: Calling supabase.auth.getSession()...');
-      
       const getSessionPromise = supabase.auth.getSession();
       const timeoutPromise = new Promise<any>((_, reject) => 
         setTimeout(() => reject(new Error('getSession timeout after 10 seconds')), 10000)
       );
       
       const { data: { session } } = await Promise.race([getSessionPromise, timeoutPromise]);
-      console.log('🔍 getCurrentUser: Got session:', session ? 'exists' : 'null');
       
       if (session?.user) {
-        console.log('🔍 getCurrentUser: User found in session:', session.user.email);
         // If we have a cached user with the same ID, return it
         if (this.currentUser && this.currentUser.id === session.user.id) {
-          console.log('🔍 getCurrentUser: Returning cached user');
           return this.currentUser
         }
         // Otherwise load fresh profile
-        console.log('🔍 getCurrentUser: Loading fresh profile...');
         await this.loadUserProfile(session.user.id)
-        console.log('🔍 getCurrentUser: Profile loaded, returning');
         return this.currentUser
       }
 
       // No valid session, clear any cached data
-      console.log('🔍 getCurrentUser: No session, returning null');
       this.currentUser = null
       return null
     } catch (error) {
-      console.error('❌ getCurrentUser: Error:', error);
       this.currentUser = null;
       return null;
     }
@@ -260,17 +249,11 @@ export class UserService {
     creditsUsed: number
     creditsLimit: number
   }> {
-    console.log('🔍 canPerformAction called with:', { action, pagesRequired });
     try {
-      console.log('🔍 Getting current user...');
       const user = await this.getCurrentUser()
-      console.log('🔍 Current user:', user ? `authenticated (${user.email})` : 'anonymous');
-      
       const sessionId = this.getSessionId()
-      console.log('🔍 Session ID:', sessionId);
 
       if (user) {
-        console.log('🔍 Processing as authenticated user...');
         // Authenticated user
         const tierConfig = TIER_CONFIG[user.tier] || TIER_CONFIG.signup
         
@@ -278,17 +261,14 @@ export class UserService {
         const userCredits = user.credits ?? tierConfig.credits
         const canPerform = userCredits >= pagesRequired
 
-        const result = {
+        return {
           canPerform,
           reason: canPerform ? undefined : `You need ${pagesRequired} credits but only have ${userCredits} available`,
           tier: user.tier || 'signup',
           creditsUsed: userCredits,
           creditsLimit: tierConfig.credits
         };
-        console.log('🔍 Authenticated result:', result);
-        return result;
       } else {
-        console.log('🔍 Processing as anonymous user...');
         // Anonymous user - check actual usage from usage_logs
         const tierConfig = TIER_CONFIG.anonymous
         const sessionId = this.getSessionId()
@@ -313,36 +293,29 @@ export class UserService {
           if (!error && usageLogs) {
             creditsUsed = usageLogs.reduce((sum: number, log: { credits_used: number }) => sum + log.credits_used, 0)
           }
-          console.log('🔍 Anonymous credits used:', creditsUsed)
         } catch (error) {
-          console.error('Error fetching anonymous usage:', error)
           // If check fails, be permissive to avoid blocking user
         }
         
         const creditsRemaining = tierConfig.credits - creditsUsed
         const canPerform = creditsRemaining >= pagesRequired
         
-        const result = {
+        return {
           canPerform,
           reason: canPerform ? undefined : `You need ${pagesRequired} credits but only have ${creditsRemaining} remaining. Sign up for more free credits!`,
           tier: 'anonymous',
           creditsUsed: creditsUsed,
           creditsLimit: tierConfig.credits
         };
-        console.log('🔍 Anonymous result:', result);
-        return result;
       }
     } catch (error) {
-      console.error('❌ Error in canPerformAction:', error);
       // If anything fails, be permissive and allow the action
-      const fallbackResult = {
+      return {
         canPerform: true,
         tier: 'anonymous',
         creditsUsed: 0,
         creditsLimit: 100
       };
-      console.log('🔍 Fallback result:', fallbackResult);
-      return fallbackResult;
     }
   }
 
@@ -436,39 +409,23 @@ export class UserService {
 
   // Sign out
   async signOut(): Promise<void> {
-    console.log('🔍 signOut: Starting...');
-    
     // Clear all local state first
     this.currentUser = null;
     this.sessionId = null;
     this.sessionContextSet = false;
     this.clearAnonymousSession();
-    console.log('🔍 signOut: Local state cleared');
     
     try {
       // Sign out from Supabase with global scope to clear all sessions
-      console.log('🔍 signOut: Calling supabase.auth.signOut()...');
-      
       const signOutPromise = supabase.auth.signOut({ scope: 'global' });
       const timeoutPromise = new Promise<any>((_, reject) => 
         setTimeout(() => reject(new Error('Sign out timeout after 3 seconds')), 3000)
       );
       
-      const { error } = await Promise.race([signOutPromise, timeoutPromise]);
-      
-      if (error) {
-        console.error('❌ signOut: Error during signOut:', error);
-        // Don't throw - we already cleared local state
-        return;
-      }
-      console.log('✅ signOut: Successfully signed out from Supabase');
+      await Promise.race([signOutPromise, timeoutPromise]);
     } catch (error) {
-      console.error('❌ signOut: Exception during signOut:', error);
       // Don't throw - we already cleared local state, which is the important part
-      console.log('⚠️ signOut: Continuing despite error (local state already cleared)');
     }
-    
-    console.log('✅ signOut: Complete - auth listener will handle state updates');
   }
 
   // Update user tier and credits after successful payment

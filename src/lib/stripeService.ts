@@ -4,7 +4,7 @@ import { TIER_CONFIG } from './supabase';
 export const STRIPE_PLANS = {
   starter: {
     name: 'Starter',
-    checkoutUrl: 'https://buy.stripe.com/test_dRmdRbcurfW97JAdhBgUM00',
+    checkoutUrl: 'https://buy.stripe.com/eVqbJ12oB011eaybtycs800',
     tier: 'starter' as const,
     credits: TIER_CONFIG.starter.credits,
     price: '$29/month'

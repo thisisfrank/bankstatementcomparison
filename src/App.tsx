@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, Eye, Target, TrendingDown, X, ChevronDown, ChevronRight, HelpCircle, ArrowLeftRight, AlertTriangle } from 'lucide-react';
+import { Upload, FileText, BarChart3, Download, CheckCircle, AlertCircle, Loader2, CreditCard, Users, Receipt, Car, Utensils, ShoppingBag, Gamepad2, Zap, Activity, DollarSign, Moon, Sun, Edit3, Trash2, Eye, Target, TrendingDown, X, ChevronDown, ChevronRight, HelpCircle, ArrowLeftRight, AlertTriangle, MessageCircle, Send } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 import { userService } from './lib/userService';
@@ -52,6 +52,99 @@ function Toast({ message, isVisible, onClose, isDark }: ToastProps) {
           <X className="h-4 w-4" />
         </button>
       </div>
+    </div>
+  );
+}
+
+// Floating chat button component
+function FloatingChatButton({ isDark }: { isDark: boolean }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [message, setMessage] = useState('');
+  const [email, setEmail] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const subject = encodeURIComponent('Message from Bank Statement App');
+    const body = encodeURIComponent(`From: ${email}\n\nMessage:\n${message}`);
+    window.location.href = `mailto:hello@cleancutsystems.com?subject=${subject}&body=${body}`;
+    setIsOpen(false);
+    setMessage('');
+    setEmail('');
+  };
+
+  return (
+    <div className="fixed bottom-6 right-6 z-[150]">
+      {/* Chat popup */}
+      {isOpen && (
+        <div className={`absolute bottom-16 right-0 w-80 rounded-xl shadow-2xl border-2 ${
+          isDark 
+            ? 'bg-black border-white' 
+            : 'bg-white border-black'
+        }`}>
+          <div className={`flex items-center justify-between p-4 border-b ${
+            isDark ? 'border-white' : 'border-black'
+          }`}>
+            <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-black'}`}>
+              Contact Us
+            </h3>
+            <button 
+              onClick={() => setIsOpen(false)} 
+              className={`p-1 rounded hover:bg-gray-500/20 ${isDark ? 'text-white' : 'text-black'}`}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <form onSubmit={handleSubmit} className="p-4 space-y-3">
+            <input
+              type="email"
+              placeholder="Your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className={`w-full px-3 py-2 rounded-lg border-2 ${
+                isDark 
+                  ? 'bg-black border-white text-white placeholder-gray-400' 
+                  : 'bg-white border-black text-black placeholder-gray-500'
+              }`}
+            />
+            <textarea
+              placeholder="Your message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              required
+              rows={3}
+              className={`w-full px-3 py-2 rounded-lg border-2 resize-none ${
+                isDark 
+                  ? 'bg-black border-white text-white placeholder-gray-400' 
+                  : 'bg-white border-black text-black placeholder-gray-500'
+              }`}
+            />
+            <button
+              type="submit"
+              className={`w-full py-2 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
+                isDark 
+                  ? 'bg-white text-black hover:bg-gray-200' 
+                  : 'bg-black text-white hover:bg-gray-800'
+              }`}
+            >
+              <Send className="h-4 w-4" />
+              Send Message
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Floating button */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110 border-2 ${
+          isDark 
+            ? 'bg-white text-black border-white hover:bg-gray-200' 
+            : 'bg-black text-white border-black hover:bg-gray-800'
+        }`}
+      >
+        {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+      </button>
     </div>
   );
 }
@@ -115,147 +208,109 @@ class BankStatementParser {
   }
 
   async parsePDF(file: File): Promise<ParsedStatement> {
-    try {
-      console.log('Starting PDF parsing via Edge Function');
-      
-      // Convert file to base64 for JSON transport
-      const fileBuffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(fileBuffer);
-      
-      // Convert to base64 in chunks to avoid stack overflow
-      let binaryString = '';
-      const chunkSize = 8192; // Process 8KB at a time
-      for (let i = 0; i < uint8Array.length; i += chunkSize) {
-        const chunk = uint8Array.subarray(i, i + chunkSize);
-        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-      }
-      const fileBase64 = btoa(binaryString);
-
-      // Step 1: Upload the PDF file via Edge Function
-      console.log('Uploading file to Edge Function...');
-      const uploadResponse = await fetch(EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          action: 'upload',
-          file: {
-            data: fileBase64,
-            name: file.name
-          }
-        })
-      });
-
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error(`Upload failed with status ${uploadResponse.status}:`, errorText);
-        throw new Error(`Upload failed: ${uploadResponse.status} - ${errorText}`);
-      }
-
-      const uploadResult = await uploadResponse.json();
-      console.log('Upload successful, result:', uploadResult);
-      
-      const uuid = uploadResult[0].uuid;
-      const state = uploadResult[0].state;
-
-      // Step 2: Check if processing is needed (for image-based PDFs)
-      if (state === 'PROCESSING') {
-        console.log('File is processing, waiting for completion...');
-        let currentState = state;
-        let attempts = 0;
-        const maxAttempts = 30; // 5 minutes max wait time
-        
-        while (currentState === 'PROCESSING' && attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
-          attempts++;
-          
-          console.log(`Status check attempt ${attempts}/${maxAttempts}...`);
-          const statusResponse = await fetch(EDGE_FUNCTION_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            },
-            body: JSON.stringify({
-              action: 'status',
-              uuid: uuid
-            })
-          });
-
-          if (!statusResponse.ok) {
-            const errorText = await statusResponse.text();
-            console.error(`Status check failed with status ${statusResponse.status}:`, errorText);
-            throw new Error(`Status check failed: ${statusResponse.status} - ${errorText}`);
-          }
-
-          const statusResult = await statusResponse.json();
-          currentState = statusResult[0].state;
-          console.log('Current state:', currentState);
-        }
-        
-        if (attempts >= maxAttempts) {
-          throw new Error('Processing timeout - file took too long to process');
-        }
-      }
-
-      // Step 3: Convert the statement to JSON
-      console.log('Converting statement to JSON...');
-      const convertResponse = await fetch(EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          action: 'convert',
-          uuid: uuid
-        })
-      });
-
-      if (!convertResponse.ok) {
-        const errorText = await convertResponse.text();
-        console.error(`Conversion failed with status ${convertResponse.status}:`, errorText);
-        throw new Error(`Conversion failed: ${convertResponse.status} - ${errorText}`);
-      }
-
-      const convertResult = await convertResponse.json();
-      console.log('Conversion successful, processing response...');
-      
-      // Process the API response and separate withdrawals from deposits
-      const result = this.processAPIResponse(convertResult[0], file.name);
-      console.log('API parsing completed successfully');
-      return result;
-      
-    } catch (error) {
-      console.error('Error parsing PDF with API:', error);
-      console.log('Falling back to sample data generation...');
-      
-      // All retries failed
-      console.error('All API attempts failed, falling back to sample data generation...');
-      console.log('Last error:', error instanceof Error ? error.message : String(error));
-      
-      // Add a flag to indicate API was not used
-      const sampleData = this.generateSampleData(file.name);
-      
-      return sampleData;
+    // Convert file to base64 for JSON transport
+    const fileBuffer = await file.arrayBuffer();
+    const uint8Array = new Uint8Array(fileBuffer);
+    
+    // Convert to base64 in chunks to avoid stack overflow
+    let binaryString = '';
+    const chunkSize = 8192; // Process 8KB at a time
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, i + chunkSize);
+      binaryString += String.fromCharCode.apply(null, Array.from(chunk));
     }
+    const fileBase64 = btoa(binaryString);
+
+    // Step 1: Upload the PDF file via Edge Function
+    const uploadResponse = await fetch(EDGE_FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        action: 'upload',
+        file: {
+          data: fileBase64,
+          name: file.name
+        }
+      })
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      throw new Error(`Failed to upload statement. Please try again.`);
+    }
+
+    const uploadResult = await uploadResponse.json();
+    const uuid = uploadResult[0].uuid;
+    const state = uploadResult[0].state;
+
+    // Step 2: Check if processing is needed (for image-based PDFs)
+    if (state === 'PROCESSING') {
+      let currentState = state;
+      let attempts = 0;
+      const maxAttempts = 30; // 5 minutes max wait time
+      
+      while (currentState === 'PROCESSING' && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+        attempts++;
+        
+        const statusResponse = await fetch(EDGE_FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            action: 'status',
+            uuid: uuid
+          })
+        });
+
+        if (!statusResponse.ok) {
+          throw new Error(`Failed to check processing status. Please try again.`);
+        }
+
+        const statusResult = await statusResponse.json();
+        currentState = statusResult[0].state;
+      }
+      
+      if (attempts >= maxAttempts) {
+        throw new Error('Processing timeout - file took too long to process');
+      }
+    }
+
+    // Step 3: Convert the statement to JSON
+    const convertResponse = await fetch(EDGE_FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        action: 'convert',
+        uuid: uuid
+      })
+    });
+
+    if (!convertResponse.ok) {
+      throw new Error(`Failed to parse statement. Please ensure it's a valid bank statement PDF.`);
+    }
+
+    const convertResult = await convertResponse.json();
+    
+    // Process the API response and separate withdrawals from deposits
+    return this.processAPIResponse(convertResult[0], file.name);
   }
 
   private processAPIResponse(apiResponse: any, fileName: string): ParsedStatement {
-    console.log('Processing API response:', apiResponse);
-    console.log('Full API response structure:', JSON.stringify(apiResponse, null, 2));
-    
     // The API returns { normalised: [...] } format
     const rawTransactions = apiResponse.normalised || [];
-    console.log('Raw transactions from API:', rawTransactions);
-    console.log('Number of raw transactions:', rawTransactions.length);
     
     // Check if the response is empty
     if (!rawTransactions || rawTransactions.length === 0) {
-      console.warn('WARNING: API returned no transactions! Check if PDF contains parseable transaction data.');
-      console.log('API response keys:', Object.keys(apiResponse));
+      throw new Error('No transactions found in the statement. Please ensure it contains transaction data.');
     }
     
     const transactions: Transaction[] = [];
@@ -296,11 +351,6 @@ class BankStatementParser {
       }
     });
 
-    console.log('Processed transactions:', transactions);
-    console.log('Processed transactions count:', transactions.length);
-    console.log('Withdrawals:', withdrawals);
-    console.log('Deposits:', deposits);
-
     const totalWithdrawals = withdrawals.reduce((sum, t) => sum + t.amount, 0);
     const totalDeposits = deposits.reduce((sum, t) => sum + t.amount, 0);
 
@@ -336,55 +386,6 @@ class BankStatementParser {
     }
     
     return 'uncategorized'; // Default category for unrecognized transactions
-  }
-
-  private generateSampleData(fileName: string): ParsedStatement {
-    const sampleWithdrawals = [
-      { description: 'Starbucks Coffee', amount: 5.47, category: 'food-dining' },
-      { description: 'Safeway Grocery Store', amount: 127.83, category: 'groceries' },
-      { description: 'Shell Gas Station', amount: 45.20, category: 'gas-transport' },
-      { description: 'Amazon Purchase', amount: 67.99, category: 'shopping' },
-      { description: 'Netflix Subscription', amount: 15.99, category: 'subscriptions' },
-      { description: 'Electric Company', amount: 89.34, category: 'utilities' },
-      { description: 'Planet Fitness', amount: 22.99, category: 'health' },
-      { description: 'ATM Withdrawal Fee', amount: 3.50, category: 'fees' },
-      { description: 'Chipotle Mexican Grill', amount: 12.45, category: 'food-dining' },
-      { description: 'Target Store', amount: 156.78, category: 'groceries' }
-    ];
-
-    const sampleDeposits = [
-      { description: 'Salary Deposit', amount: 2500.00, category: 'income' },
-      { description: 'Freelance Payment', amount: 500.00, category: 'income' },
-      { description: 'Refund - Amazon', amount: 45.67, category: 'refunds' },
-      { description: 'Interest Payment', amount: 12.34, category: 'income' }
-    ];
-
-    const withdrawals = sampleWithdrawals.map((sample, i) => ({
-      id: `withdrawal-${i}`,
-      date: `11/${Math.floor(Math.random() * 28) + 1}`,
-      ...sample,
-      type: 'withdrawal' as const
-    }));
-
-    const deposits = sampleDeposits.map((sample, i) => ({
-      id: `deposit-${i}`,
-      date: `11/${Math.floor(Math.random() * 28) + 1}`,
-      ...sample,
-      type: 'deposit' as const
-    }));
-
-    const transactions = [...withdrawals, ...deposits];
-    const totalWithdrawals = withdrawals.reduce((sum, t) => sum + t.amount, 0);
-    const totalDeposits = deposits.reduce((sum, t) => sum + t.amount, 0);
-
-    return {
-      transactions,
-      withdrawals,
-      deposits,
-      totalWithdrawals,
-      totalDeposits,
-      accountHolder: fileName.replace('.pdf', '')
-    };
   }
 
   async getPDFPageCount(file: File): Promise<number> {
@@ -2237,7 +2238,6 @@ function PricingPage({ isVisible, onBack, isDark, onOpenAuth }: {
         alert('Error starting checkout process. Please try again.');
       }
     } else {
-      console.log(`Unknown plan: ${planName}`);
     }
   };
 
@@ -2451,7 +2451,6 @@ function SettingsPage({ isVisible, onBack, isDark, onToggleDarkMode, isAuthentic
   if (!isVisible) return null;
 
   const handleManageSubscription = () => {
-    console.log('Manage subscription clicked - no action taken (Stripe removed)');
   };
 
   const handleUpgrade = () => {
@@ -2916,15 +2915,6 @@ function PastDocumentsPage({ isVisible, onBack, isDark, onViewDetails }: {
 
         const { data, error } = await query;
 
-        console.log('Past documents query:', { user: user?.id, sessionId, data, error });
-        
-        // Also check if there are any comparisons at all in the database
-        const { data: allData, error: allError } = await supabase
-          .from('comparisons')
-          .select('*')
-          .limit(5);
-        console.log('All comparisons in database:', { allData, allError });
-
         if (error) {
           console.error('Error fetching past documents:', error);
           setPastDocuments([]);
@@ -2970,14 +2960,10 @@ function PastDocumentsPage({ isVisible, onBack, isDark, onViewDetails }: {
   if (!isVisible) return null;
 
   const handleDownloadPDF = (documentId: string) => {
-    // In a real app, this would download the actual PDF
-    console.log(`Downloading PDF for document ${documentId}`);
     alert(`Downloading comparison PDF for document ${documentId}`);
   };
 
   const handleDownloadCSV = (documentId: string) => {
-    // In a real app, this would download the actual CSV
-    console.log(`Downloading CSV for document ${documentId}`);
     alert(`Downloading comparison CSV for document ${documentId}`);
   };
 
@@ -3643,9 +3629,8 @@ function App() {
         const user = await userService.getCurrentUser();
         const sessionId = userService.getSessionId();
         await categorizationService.loadUserRules(user?.id, sessionId);
-        console.log('Categorization service initialized with', categorizationService.getRuleCount(), 'rules');
       } catch (error) {
-        console.error('Failed to initialize categorization service:', error);
+        // Silent fail - categorization will use default rules
       }
     };
     initCategorizationService();
@@ -3761,7 +3746,6 @@ function App() {
     const checkAuthStatus = async () => {
       try {
         // Force clear states first to prevent stale UI
-        console.log('🔄 Clearing auth states before check...');
         setIsAuthenticated(false);
         setIsSignedIn(false);
         setUserTier(undefined);
@@ -3769,11 +3753,9 @@ function App() {
         
         // Check for valid session instead of cached user data
         const { data: { session } } = await supabase.auth.getSession();
-        console.log('Initial session check:', session ? 'Session exists' : 'No session', session?.user?.id);
         
         if (session?.user) {
           // Valid session exists, user is authenticated
-          console.log('Setting authenticated state to true for user:', session.user.id);
           setIsAuthenticated(true);
           setIsSignedIn(true);
           setUserEmail(session.user.email);
@@ -3783,16 +3765,10 @@ function App() {
             const user = await userService.getCurrentUser();
             setUserTier(user?.tier || 'signup');
           } catch (error) {
-            console.error('Error loading user profile on init:', error);
             setUserTier('signup'); // Fallback tier
           }
-        } else {
-          // No valid session, user is not authenticated
-          console.log('No session found, confirming authenticated state is false');
-          // States already cleared above
         }
       } catch (error) {
-        console.error('Error checking auth status:', error);
         // Assume not authenticated on error
         setIsAuthenticated(false);
         setIsSignedIn(false);
@@ -3805,22 +3781,12 @@ function App() {
 
     // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user?.id);
-      console.log('Session details:', session ? {
-        access_token: session.access_token ? 'present' : 'missing',
-        refresh_token: session.refresh_token ? 'present' : 'missing',
-        expires_at: session.expires_at,
-        user_id: session.user?.id
-      } : 'no session');
-      
       if (event === 'SIGNED_OUT' || !session) {
-        console.log('Processing SIGNED_OUT event');
         setIsAuthenticated(false);
         setIsSignedIn(false);
         setUserTier(undefined);
         setUserEmail(undefined);
       } else if (event === 'SIGNED_IN' && session) {
-        console.log('Processing SIGNED_IN event - this should not happen if user clicked sign out!');
         try {
           // Set auth state immediately to prevent hanging UI
           setIsAuthenticated(true);
@@ -3831,7 +3797,6 @@ function App() {
           const user = await userService.getCurrentUser();
           setUserTier(user?.tier);
         } catch (error) {
-          console.error('Error loading user profile after sign in:', error);
           // Keep user signed in even if profile loading fails
           setUserTier('signup'); // Default fallback tier
         }
@@ -3850,16 +3815,13 @@ function App() {
       
       // Handle payment cancellation
       if (urlParams.get('payment_cancelled') === 'true') {
-        console.log('Payment cancelled');
         stripeService.clearPaymentParams();
-        // Optionally show a message or redirect to pricing page
         return;
       }
       
       // Handle payment success
       const paymentResult = stripeService.checkPaymentSuccess();
       if (paymentResult.success) {
-        console.log('Payment success detected:', paymentResult);
         
         // Clear payment parameters from URL
         stripeService.clearPaymentParams();
@@ -3942,31 +3904,15 @@ function App() {
         files.map(file => parser.parsePDF(file))
       );
       
-      console.log('PDF parsing completed, setting parsed data...');
-      console.log('Results:', results);
-      console.log('Number of results:', results.length);
-      results.forEach((result, index) => {
-        console.log(`Statement ${index + 1} - Transactions: ${result.transactions.length}, Withdrawals: ${result.withdrawals.length}, Deposits: ${result.deposits.length}`);
-      });
-      
-      // Check if any results have no transactions
-      const emptyResults = results.filter(r => r.transactions.length === 0);
-      if (emptyResults.length > 0) {
-        console.warn(`WARNING: ${emptyResults.length} statement(s) have no transactions!`);
-      }
-      
       setParsedData(results);
       
       // Calculate total pages processed from all statements
-      console.log('Getting page counts...');
       const pageCounts = await Promise.all(
         files.map(file => parser.getPDFPageCount(file))
       );
       const totalPages = pageCounts.reduce((sum, count) => sum + count, 0);
-      console.log('Total pages:', totalPages);
       
       // Check tier limits before allowing comparison
-      console.log('Checking tier limits...');
       let tierCheck;
       try {
         // Add a 5-second timeout to prevent hanging
@@ -3977,11 +3923,9 @@ function App() {
         
         tierCheck = await Promise.race([tierCheckPromise, timeoutPromise]) as any;
       } catch (error) {
-        console.error('Error checking tier limits:', error);
         // Default to allowing if check fails or times out
         tierCheck = { canPerform: true };
       }
-      console.log('Tier check result:', tierCheck);
       
       if (!tierCheck.canPerform) {
         alert(tierCheck.reason || 'You have reached your tier limit. Please upgrade to continue.');
@@ -4029,10 +3973,8 @@ function App() {
         };
       });
       
-      console.log('Setting comparison results...');
       setComparisonResults(comparison);
       setComparisonGenerated(true);
-      console.log('Comparison generated successfully!');
       
       // Navigate to results page
       setCurrentComparisonView({
@@ -4052,20 +3994,17 @@ function App() {
       
       // Log the usage based on pages processed
       try {
-        console.log('Logging usage...');
         const logUsagePromise = userService.logUsage('comparison', totalPages);
         const timeoutPromise = new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Log usage timeout')), 3000)
         );
         await Promise.race([logUsagePromise, timeoutPromise]);
-        console.log('Usage logged successfully');
       } catch (error) {
-        console.error('Error logging usage (non-blocking):', error);
+        // Non-blocking - don't fail comparison if usage logging fails
       }
       
       // Save comparison to database
       try {
-        console.log('Getting current user...');
         let user;
         try {
           const getUserPromise = userService.getCurrentUser();
@@ -4074,10 +4013,8 @@ function App() {
           );
           user = await Promise.race([getUserPromise, timeoutPromise]);
         } catch (error) {
-          console.error('Error getting user (continuing anyway):', error);
           user = null;
         }
-        console.log('User:', user);
         const sessionId = userService.getSessionId();
         
         // Ensure session context is set for anonymous users (required for RLS)
@@ -4107,8 +4044,6 @@ function App() {
           status: 'completed'
         };
         
-        console.log('Saving comparison data:', saveData);
-        
         try {
           const savePromise = supabase
             .from('comparisons')
@@ -4118,38 +4053,25 @@ function App() {
             setTimeout(() => reject(new Error('Database save timeout')), 5000)
           );
           
-          const { data: savedData, error: saveError } = await Promise.race([savePromise, timeoutPromise]) as any;
-            
-          if (saveError) {
-            console.error('Error saving comparison:', saveError);
-          } else {
-            console.log('Successfully saved comparison:', savedData);
-          }
+          await Promise.race([savePromise, timeoutPromise]);
         } catch (error) {
-          console.error('Error or timeout saving comparison:', error);
+          // Non-blocking - don't fail comparison if database save fails
         }
       } catch (error) {
-        console.error('Error saving comparison to database:', error);
+        // Non-blocking - don't fail comparison if database save fails
       }
       
-      console.log('All operations completed, showing success message...');
-      
-      // Check if we actually have transaction data
+      // Show success message with transaction count
       const totalTransactions = results.reduce((sum, r) => sum + r.transactions.length, 0);
-      if (totalTransactions === 0) {
-        alert(`Warning: Processed ${totalPages} pages but found no transactions. The PDF may be image-based or have an unsupported format. Please check the browser console for details.`);
-      } else {
-        alert(`Comparison completed! Processed ${totalPages} pages and found ${totalTransactions} transactions.`);
-      }
+      alert(`Comparison completed! Processed ${totalPages} pages and found ${totalTransactions} transactions.`);
       
-    } catch (error) {
-      console.error('Error processing PDFs:', error);
-      alert('Error processing PDFs. Please try again.');
+    } catch (error: any) {
+      // Show user-friendly error message
+      const message = error?.message || 'Error processing statements. Please try again.';
+      alert(message);
     } finally {
-      console.log('Resetting loading states in finally block...');
       setUploading(files.map(() => false));
       setIsGeneratingComparison(false);
-      console.log('Loading states reset complete');
     }
   };
 
@@ -4391,10 +4313,6 @@ function App() {
                 </div>
                 
                 <nav className="flex items-center gap-6">
-                  {(() => {
-                    console.log('🎨 UI Render - isSignedIn:', isSignedIn, 'isAuthenticated:', isAuthenticated);
-                    return null;
-                  })()}
                   {!isSignedIn ? (
                     <>
                       {/* Anonymous usage indicator - will be updated dynamically */}
@@ -4977,6 +4895,9 @@ function App() {
         onClose={() => setShowToast(false)}
         isDark={isDarkMode}
       />
+
+      {/* Floating chat button */}
+      <FloatingChatButton isDark={isDarkMode} />
     </>
   );
 }
